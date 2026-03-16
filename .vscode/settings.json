@@ -1,0 +1,5 @@
+{
+    "python.terminal.useEnvFile": true,
+    "python.terminal.envFile": ".env",
+    "python.analysis.typeCheckingMode": "basic"
+}

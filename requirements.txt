@@ -1,0 +1,16 @@
+# Core Bot Framework
+aiogram>=3.26.0
+
+# Database (SQLite + ORM)
+sqlalchemy>=2.0.0
+aiosqlite>=0.19.0
+
+# Configuration & Environment Variables
+pydantic-settings>=2.0.0
+python-dotenv>=1.0.0
+
+# Scheduling (Weekly Summary)
+aiocron>=1.8
+
+# UI Components (Calendar Picker)
+aiogram-calendar>=0.6.0

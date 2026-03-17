@@ -1,3 +1,4 @@
+# bot/moderator_handlers.py
 """
 Moderator handlers for approval workflow and DM finalization.
 Separated from user handlers for clarity.
@@ -8,18 +9,24 @@ import asyncio
 import logging
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
-from bot.moderator_states import ModeratorEdit  
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
+from sqlalchemy import and_
+from db.crud import get_moderator_stats
+
+# ✅ ADD i18n IMPORT
+from utils.i18n import i18n, t
+
+from bot.moderator_states import ModeratorEdit
 from bot.keyboards import (
     moderation_keyboard,
     decline_reason_keyboard,
     moderator_skip_keyboard,
     moderator_confirmation_keyboard
 )
-from db.models import get_session, Poster
-from db.crud import get_poster, update_poster_status, ModerationStatus, get_pending_posters_count
+from db.models import get_session, Poster, User
+from db.crud import get_poster, update_poster_status, ModerationStatus, get_pending_posters_count, get_user_stats
 from utils.helpers import format_public_caption, format_moderation_caption
 from config import config
 from datetime import datetime
@@ -35,11 +42,13 @@ moderator_edit_router = Router(name="moderator_edit") # Moderator DM handlers
 # =============================================================================
 
 @moderation_router.callback_query(F.data.regexp(r"^(approve|decline):(\d+):([01]):(\d+)$"))
-async def handle_moderation_decision(callback: types.CallbackQuery):  # No FSMContext!
+async def handle_moderation_decision(callback: types.CallbackQuery):
     """Process moderator approve/decline decision"""
     
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     if callback.from_user.id not in config.admin_ids:
-        await callback.answer("❌ You're not authorized to moderate!", show_alert=True)
+        await callback.answer(t("common.not_authorized", language), show_alert=True)  # ← CHANGED
         return
     
     action, user_id_str, anon_flag, poster_id_str = callback.data.split(":")
@@ -53,7 +62,7 @@ async def handle_moderation_decision(callback: types.CallbackQuery):  # No FSMCo
             poster = get_poster(session, poster_id)
             
             if not poster:
-                await callback.answer("⚠️ Poster not found!", show_alert=True)
+                await callback.answer(t("common.not_found", language), show_alert=True)  # ← CHANGED
                 return
             
             if action == "approve":
@@ -67,33 +76,37 @@ async def handle_moderation_decision(callback: types.CallbackQuery):  # No FSMCo
                 
                 # ✅ Send DM - but DON'T set FSM state yet!
                 # State will be set when moderator responds IN DM
-                skip_builder = InlineKeyboardBuilder()
-                skip_builder.row(
-                    InlineKeyboardButton(
-                        text="⏭️ Skip - Use Original", 
-                        callback_data=f"moderator:skip:{poster_id}"
-                    )
-                )
-                
                 await callback.bot.send_message(
                     chat_id=moderator_id,
                     text=(
-                        "✏️ <b>Create Final Description</b>\n\n"
-                        f"Poster ID: <code>{poster_id}</code>\n"
-                        f"User's link: <code>{poster.caption}</code>\n\n"
-                        "Send the final description for this post.\n\n"
-                        "Or click 'Skip' to use the original caption."
+                        "✏️ <b>Создайте финальное описание</b>\n\n"
+                        f"ID афиши: <code>{poster_id}</code>\n"
+                        f"Ссылка пользователя: <code>{poster.caption}</code>\n\n"
+                        "Отправьте финальное описание для этой публикации.\n"
+                        "Включите:\n"
+                        "• Детали события\n"
+                        "• Дата/время\n"
+                        "• Место проведения\n"
+                        "• Ссылки на билеты\n"
+                        "• Хештеги\n\n"
+                        "Или нажмите «Пропустить», чтобы использовать оригинальное описание."
                     ),
                     parse_mode="HTML",
-                    reply_markup=skip_builder.as_markup()
+                    reply_markup=InlineKeyboardBuilder().row(
+                        InlineKeyboardButton(
+                            text="⏭️ Пропустить — использовать оригинал", 
+                            callback_data=f"moderator:skip:{poster_id}"  # ← Includes poster_id!
+                        )
+                    ).as_markup()
                 )
                 
                 # Edit moderation message
                 status_text = (
                     f"\n\n━━━━━━━━━━━━━━━━━━━━\n"
-                    f"⏳ <b>PENDING FINAL</b>\n"
+                    f"{t('moderation.status.pending_final', language)}\n"
                     f"👤 Moderator: @{moderator_username}\n"
-                    f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+                    f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
+                    f"<i>{t('moderation.status.pending_final_hint', language)}</i>"
                 )
                 
                 if callback.message.photo:
@@ -109,39 +122,44 @@ async def handle_moderation_decision(callback: types.CallbackQuery):  # No FSMCo
                         reply_markup=None
                     )
                 
-                await callback.answer("✅ Sent to your DM for finalization!", show_alert=False)
+                await callback.answer("✅ Отправлено в ЛС для финализации!", show_alert=False)  # ← CHANGED
                 
             elif action == "decline":
                 # Show decline reason keyboard (stateless)
+                keyboard = decline_reason_keyboard(user_id, anon_flag, poster_id, language)  # ← ADDED language param
+                
                 if callback.message.photo:
                     await callback.message.edit_caption(
                         caption=callback.message.caption or "📝 Poster Submission",
-                        reply_markup=decline_reason_keyboard(user_id, anon_flag, poster_id).as_markup()
+                        reply_markup=keyboard.as_markup()
                     )
                 else:
                     await callback.message.edit_text(
                         text=callback.message.caption or "📝 Poster Submission",
-                        reply_markup=decline_reason_keyboard(user_id, anon_flag, poster_id).as_markup()
+                        reply_markup=keyboard.as_markup()
                     )
                 
-                await callback.answer("Select a decline reason:")
+                await callback.answer("Выберите причину отклонения:")  # ← CHANGED
             
             logger.info(f"Moderation {action} for poster {poster_id} by @{moderator_username}")
             
     except Exception as e:
         logger.error(f"Moderation error: {e}")
-        await callback.answer("⚠️ Error processing decision.", show_alert=True)
+        await callback.answer(t("common.error", language), show_alert=True)  # ← CHANGED
+
 
 @moderation_router.callback_query(F.data.regexp(r"^decline_reason:(\w+):(\d+):([01]):(\d+)$"))
 async def handle_decline_reason(callback: types.CallbackQuery):
     """Handle decline reason selection"""
     
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     # Check if moderator is admin
     if callback.from_user.id not in config.admin_ids:
-        await callback.answer("❌ You're not authorized!", show_alert=True)
+        await callback.answer(t("common.not_authorized", language), show_alert=True)  # ← CHANGED
         return
     
-    # Parse callback data: decline_reason:reason_code:user_id:anon_flag:poster_id
+    # Parse callback  decline_reason:reason_code:user_id:anon_flag:poster_id
     parts = callback.data.split(":")
     
     if len(parts) != 5:
@@ -155,24 +173,15 @@ async def handle_decline_reason(callback: types.CallbackQuery):
     moderator_id = callback.from_user.id
     moderator_username = callback.from_user.username or "no_username"
     
-    # Map reason codes to user-friendly messages
-    reason_messages = {
-        "low_quality": "📷 Low image quality - Please use a clearer, higher resolution image.",
-        "missing_details": "📝 Missing event details - Please include date, time, and location.",
-        "inappropriate": "🚫 Inappropriate content - Please ensure content follows community guidelines.",
-        "wrong_date": "📅 Wrong date or past event - Please submit events that are in the future.",
-        "duplicate": "🔄 Duplicate submission - This event was already submitted.",
-        "custom": "⚠️ Please contact moderation for more details."
-    }
-    
-    reason_text = reason_messages.get(reason_code, "⚠️ Poster declined by moderation.")
+    # ✅ Map reason codes to translations
+    reason_text = t(f"notifications.decline_reasons.{reason_code}", language)
     
     try:
         with get_session() as session:
             # Get poster to verify it exists
             poster = get_poster(session, poster_id)
             if not poster:
-                await callback.answer("⚠️ Poster not found!", show_alert=True)
+                await callback.answer(t("common.not_found", language), show_alert=True)  # ← CHANGED
                 return
             
             # Update database
@@ -184,14 +193,14 @@ async def handle_decline_reason(callback: types.CallbackQuery):
                 decline_reason=reason_code
             )
             
-            # Notify user with reason
+            # ✅ Notify user with reason (in Russian)
             await callback.bot.send_message(
                 chat_id=user_id,
                 text=(
-                    "😔 <b>Your poster was declined</b>\n\n"
-                    f"<b>Reason:</b> {reason_text}\n\n"
-                    f"<b>Moderator:</b> @{moderator_username}\n\n"
-                    "<i>Use /poster to submit a new version.</i>"
+                    f"{t('notifications.declined.title', language)}\n\n"
+                    f"{t('notifications.declined.reason', language)} {reason_text}\n\n"
+                    f"{t('notifications.declined.moderator', language)} @{moderator_username}\n\n"
+                    f"{t('notifications.declined.hint', language)}"
                 ),
                 parse_mode="HTML"
             )
@@ -199,7 +208,7 @@ async def handle_decline_reason(callback: types.CallbackQuery):
             # EDIT moderation message to show result
             status_text = (
                 f"\n\n━━━━━━━━━━━━━━━━━━━━\n"
-                f"❌ <b>DECLINED</b>\n"
+                f"{t('moderation.status.declined', language)}\n"
                 f"👤 Moderator: @{moderator_username}\n"
                 f"📋 Reason: {reason_code}\n"
                 f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
@@ -218,24 +227,26 @@ async def handle_decline_reason(callback: types.CallbackQuery):
                     reply_markup=None
                 )
             
-            await callback.answer("❌ Poster declined!", show_alert=False)
+            await callback.answer("❌ Афиша отклонена!", show_alert=False)  # ← CHANGED
             logger.info(f"Poster {poster_id} declined by @{moderator_username} - Reason: {reason_code}")
             
     except Exception as e:
         logger.error(f"Decline error: {e}")
-        await callback.answer("⚠️ Error processing decline.", show_alert=True)
+        await callback.answer(t("common.error", language), show_alert=True)  # ← CHANGED
 
 
 @moderation_router.callback_query(F.data.regexp(r"^moderation:cancel_decline:(\d+):([01]):(\d+)$"))
 async def cancel_decline(callback: types.CallbackQuery):
     """Cancel decline action and restore original keyboard"""
     
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     # Check if moderator is admin
     if callback.from_user.id not in config.admin_ids:
-        await callback.answer("❌ Not authorized!", show_alert=True)
+        await callback.answer(t("common.not_authorized", language), show_alert=True)  # ← CHANGED
         return
     
-    # Parse callback data: moderation:cancel_decline:user_id:anon_flag:poster_id
+    # Parse callback  moderation:cancel_decline:user_id:anon_flag:poster_id
     parts = callback.data.split(":")
     user_id = int(parts[2])
     anon_flag = parts[3]
@@ -249,14 +260,15 @@ async def cancel_decline(callback: types.CallbackQuery):
             poster = get_poster(session, poster_id)
             
             if not poster:
-                await callback.answer("⚠️ Poster not found!", show_alert=True)
+                await callback.answer(t("common.not_found", language), show_alert=True)  # ← CHANGED
                 return
             
             # Restore original moderation keyboard
             keyboard = moderation_keyboard(
                 user_id=poster.user_id,
                 is_anonymous=poster.is_anonymous,
-                poster_id=poster.id
+                poster_id=poster.id,
+                language=language  # ← ADDED language param
             ).as_markup()
             
             # Get original caption (remove any status text)
@@ -282,83 +294,75 @@ async def cancel_decline(callback: types.CallbackQuery):
                     reply_markup=keyboard
                 )
         
-        await callback.answer("✅ Decline cancelled. Original options restored.")
+        await callback.answer("✅ Отклонение отменено. Варианты восстановлены.", show_alert=True)  # ← CHANGED
         logger.info(f"Decline cancelled for poster {poster_id}")
         
     except Exception as e:
         logger.error(f"Cancel decline error: {e}")
-        await callback.answer("⚠️ Error cancelling decline.", show_alert=True)
+        await callback.answer(t("common.error", language), show_alert=True)  # ← CHANGED
 
-
-# bot/moderator_handlers.py - Add this after cancel_decline handler
 
 @moderation_router.callback_query(F.data.regexp(r"^userinfo:(\d+)$"))
 async def handle_userinfo(callback: types.CallbackQuery):
     """Show information about the user who submitted the poster"""
     
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     # Check if moderator is admin
     if callback.from_user.id not in config.admin_ids:
-        await callback.answer("❌ You're not authorized!", show_alert=True)
+        await callback.answer(t("common.not_authorized", language), show_alert=True)  # ← CHANGED
         return
     
-    # Parse callback data: userinfo:user_id
+    # Parse callback  userinfo:user_id
     user_id = int(callback.data.split(":")[1])
     
     try:
         with get_session() as session:
-            # Get user from database
-            from db.crud import get_user_stats
-            from db.models import User
-            
             user = session.query(User).filter(User.telegram_id == user_id).first()
             
             if not user:
-                await callback.answer("⚠️ User not found!", show_alert=True)
+                await callback.answer(t("common.not_found", language), show_alert=True)  # ← CHANGED
                 return
             
             # Get user's poster statistics
             stats = get_user_stats(session, user_id)
             
-            # Build user info text (in Russian)
-            userinfo_text = (
-                f"👤 <b>Информация о пользователе</b>\n\n"
-                f"<b>ID:</b> <code>{user.telegram_id}</code>\n"
-                f"<b>Имя:</b> {user.first_name}"
-            )
+            # ✅ Build user info text using translations
+            userinfo_text = f"{t('moderation.userinfo.title', language)}\n\n"
+            userinfo_text += f"{t('moderation.userinfo.id', language)} <code>{user.telegram_id}</code>\n"
+            userinfo_text += f"{t('moderation.userinfo.name', language)} {user.first_name}"
             
             if user.last_name:
                 userinfo_text += f" {user.last_name}"
             
             if user.username:
-                userinfo_text += f"\n<b>Username:</b> @{user.username}"
+                userinfo_text += f"\n{t('moderation.userinfo.username', language)} @{user.username}"
             else:
-                userinfo_text += "\n<b>Username:</b> <i>не указан</i>"
+                userinfo_text += f"\n{t('moderation.userinfo.username', language)} {t('moderation.userinfo.username_none', language)}"
             
             if user.language_code:
-                userinfo_text += f"\n<b>Язык:</b> {user.language_code.upper()}"
+                userinfo_text += f"\n{t('moderation.userinfo.language', language)} {user.language_code.upper()}"
             
             if user.is_premium:
-                userinfo_text += "\n<b>Telegram Premium:</b> ✅"
+                userinfo_text += f"\n{t('moderation.userinfo.premium', language)} {t('moderation.userinfo.premium_yes', language)}"
             
-            userinfo_text += (
-                f"\n\n📊 <b>Статистика публикаций:</b>\n"
-                f"Всего отправлено: <b>{stats['total']}</b>\n"
-                f"✅ Одобрено: <b>{stats['approved']}</b>\n"
-                f"❌ Отклонено: <b>{stats['declined']}</b>\n"
-                f"⏳ В ожидании: <b>{stats['pending']}</b>\n\n"
-                f"<i>Зарегистрирован:</i> {user.created_at.strftime('%d.%m.%Y %H:%M') if user.created_at else 'Н/Д'}"
-            )
+            userinfo_text += f"\n\n{t('moderation.userinfo.stats_title', language)}\n"
+            userinfo_text += f"{t('moderation.userinfo.stats_total', language)}: <b>{stats['total']}</b>\n"
+            userinfo_text += f"{t('moderation.userinfo.stats_approved', language)}: <b>{stats['approved']}</b>\n"
+            userinfo_text += f"{t('moderation.userinfo.stats_declined', language)}: <b>{stats['declined']}</b>\n"
+            userinfo_text += f"{t('moderation.userinfo.stats_pending', language)}: <b>{stats['pending']}</b>\n\n"
+            userinfo_text += f"{t('moderation.userinfo.registered', language)} {user.created_at.strftime('%d.%m.%Y %H:%M') if user.created_at else 'Н/Д'}"
             
             # Build keyboard with actions
             builder = InlineKeyboardBuilder()
             builder.row(
-                InlineKeyboardButton(text="📨 Написать пользователю", url=f"tg://user?id={user_id}")
+                InlineKeyboardButton(text=t("moderation.userinfo.write_button", language), url=f"tg://user?id={user_id}")
             )
             builder.row(
-                InlineKeyboardButton(text="❌ Закрыть", callback_data="userinfo:close")
+                InlineKeyboardButton(text=t("moderation.userinfo.close_button", language), callback_data="userinfo:close")
             )
             
-            # Send as new message (or edit existing)
+            # Send as new message
             await callback.message.answer(
                 userinfo_text,
                 parse_mode="HTML",
@@ -370,7 +374,7 @@ async def handle_userinfo(callback: types.CallbackQuery):
             
     except Exception as e:
         logger.error(f"User info error: {e}")
-        await callback.answer("⚠️ Error getting user info.", show_alert=True)
+        await callback.answer(t("common.error", language), show_alert=True)  # ← CHANGED
 
 
 @moderation_router.callback_query(F.data == "userinfo:close")
@@ -383,34 +387,31 @@ async def close_userinfo(callback: types.CallbackQuery):
         await callback.answer()
     except:
         # If can't delete, just answer
-        await callback.answer("ℹ️ Закройте сообщение вручную")
+        await callback.answer(t("common.close", language))  # ← CHANGED
 
 
 # =============================================================================
 # ============ MODERATOR DM HANDLERS (Two-Stage Moderation) ===================
 # =============================================================================
 
-# bot/moderator_handlers.py
-
-# ============ MODERATOR DM: SKIP BUTTON (First Response - SETS STATE) ============
-
 @moderator_edit_router.callback_query(F.data.startswith("moderator:skip:"))
 async def skip_description(callback: types.CallbackQuery, state: FSMContext):
     """Handle skip button - FIRST response in DM (sets FSM state)"""
     
+    language = i18n.get_user_language(callback.from_user.language_code)
     poster_id = int(callback.data.split(":")[2])
     
     with get_session() as session:
         poster = get_poster(session, poster_id)
         if not poster:
-            await callback.answer("⚠️ Poster not found!", show_alert=True)
+            await callback.answer(t("common.not_found", language), show_alert=True)
             return
         
         # ✅ SET FSM STATE HERE (in DM context!)
         await state.set_state(ModeratorEdit.waiting_for_confirmation)
         await state.update_data(
             poster_id=poster_id,
-            user_id=poster.user_id,  # ← Store for later notification
+            user_id=poster.user_id,
             is_anonymous=poster.is_anonymous,
             photo_file_id=poster.photo_file_id,
             final_caption=poster.caption,
@@ -432,34 +433,34 @@ async def skip_description(callback: types.CallbackQuery, state: FSMContext):
             }
         )
         
+        # ✅ Build keyboard inline with poster_id
         confirm_builder = InlineKeyboardBuilder()
         confirm_builder.row(
-            InlineKeyboardButton(text="✅ Publish to Channel", callback_data=f"moderator:confirm:{poster_id}"),
-            InlineKeyboardButton(text="✏️ Edit Anyway", callback_data=f"moderator:edit:{poster_id}")
+            InlineKeyboardButton(text="✅ Опубликовать в канале", callback_data=f"moderator:confirm:{poster_id}"),
+            InlineKeyboardButton(text="✏️ Редактировать ещё раз", callback_data=f"moderator:edit:{poster_id}")
         )
         confirm_builder.row(
-            InlineKeyboardButton(text="❌ Cancel", callback_data=f"moderator:cancel:{poster_id}")
+            InlineKeyboardButton(text=t("common.cancel", language), callback_data=f"moderator:cancel:{poster_id}")
         )
         
         await callback.message.answer(
-            "👁️ <b>Preview (Original Caption)</b>\n\n"
+            f"👁️ <b>Предпросмотр (оригинальное описание)</b>\n\n"
             f"{preview_caption}\n\n"
-            "<i>Ready to publish?</i>",
+            f"<i>Готовы опубликовать?</i>",
             parse_mode="HTML",
             reply_markup=confirm_builder.as_markup()
         )
         await callback.answer()
 
-# ============ MODERATOR DM: TEXT DESCRIPTION (First Response - SETS STATE) ============
 
 @moderator_edit_router.message(F.text)
 async def process_moderator_description(message: types.Message, state: FSMContext):
     """Handle moderator typing description - FIRST response in DM (sets FSM state)"""
     
+    language = i18n.get_user_language(message.from_user.language_code)
     moderator_id = message.from_user.id
     
     with get_session() as session:
-        from sqlalchemy import and_
         poster = session.query(Poster).filter(
             and_(
                 Poster.status == ModerationStatus.PENDING_FINAL,
@@ -469,9 +470,9 @@ async def process_moderator_description(message: types.Message, state: FSMContex
         
         if not poster:
             await message.answer(
-                    "ℹ️ No poster waiting for finalization.\n"
-                    "Approve one in the moderation chat first!"
-                )
+                "ℹ️ Нет афиш, ожидающих финализации.\n"
+                "Сначала одобрите афишу в чате модерации!"
+            )
             return
         
         poster_id = poster.id
@@ -480,10 +481,10 @@ async def process_moderator_description(message: types.Message, state: FSMContex
         await state.set_state(ModeratorEdit.waiting_for_confirmation)
         await state.update_data(
             poster_id=poster_id,
-            user_id=poster.user_id,  # ← Store for later notification
+            user_id=poster.user_id,
             is_anonymous=poster.is_anonymous,
             photo_file_id=poster.photo_file_id,
-            final_caption=message.text,  # ← Moderator's new description
+            final_caption=message.text,
             event_date=poster.event_date.isoformat() if poster.event_date else None,
             first_name=poster.user.first_name if poster.user else None,
             username=poster.user.username if poster.user else None,
@@ -502,37 +503,36 @@ async def process_moderator_description(message: types.Message, state: FSMContex
             }
         )
         
+        # ✅ Build keyboard inline with poster_id
         confirm_builder = InlineKeyboardBuilder()
         confirm_builder.row(
-            InlineKeyboardButton(text="✅ Publish to Channel", callback_data=f"moderator:confirm:{poster_id}"),
-            InlineKeyboardButton(text="✏️ Edit Again", callback_data=f"moderator:edit:{poster_id}")
+            InlineKeyboardButton(text="✅ Опубликовать в канале", callback_data=f"moderator:confirm:{poster_id}"),
+            InlineKeyboardButton(text="✏️ Редактировать ещё раз", callback_data=f"moderator:edit:{poster_id}")
         )
         confirm_builder.row(
-            InlineKeyboardButton(text="❌ Cancel", callback_data=f"moderator:cancel:{poster_id}")
+            InlineKeyboardButton(text=t("common.cancel", language), callback_data=f"moderator:cancel:{poster_id}")
         )
         
         await message.answer(
-            "👁️ <b>Preview Before Publishing</b>\n\n"
+            f"👁️ <b>Предпросмотр перед публикацией</b>\n\n"
             f"{preview_caption}\n\n"
-            "<i>Review before it goes live!</i>",
+            f"<i>Проверьте перед публикацией!</i>",
             parse_mode="HTML",
             reply_markup=confirm_builder.as_markup()
         )
 
-# ============ MODERATOR DM: CONFIRMATION (Uses FSM State + DB for Notification) ============
 
 @moderator_edit_router.callback_query(ModeratorEdit.waiting_for_confirmation, F.data.startswith("moderator:confirm:"))
 async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
     """Final confirmation - publish to channel"""
     
+    language = i18n.get_user_language(callback.from_user.language_code)
+    poster_id = int(callback.data.split(":")[2])
     data = await state.get_data()
-    poster_id = data.get("poster_id")
-    user_id = data.get("user_id")  # ← From FSM (or fetch from DB)
     
     with get_session() as session:
-        # ✅ Could also fetch from DB to be extra safe
         poster = get_poster(session, poster_id)
-        user_id = poster.user_id  # ← Use DB as source of truth
+        user_id = poster.user_id
         
         target_channel_id = config.test_channel_id if config.debug_mode else config.main_channel_id
         
@@ -549,7 +549,7 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
         )
         
         if config.debug_mode:
-            final_caption += "\n\n⚠️ <i>TEST MODE - Not a real post</i>"
+            final_caption += "\n\n⚠️ <i>ТЕСТОВЫЙ РЕЖИМ — не реальная публикация</i>"
         
         sent_message = await callback.bot.send_photo(
             chat_id=target_channel_id,
@@ -567,38 +567,42 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
             channel_chat_id=target_channel_id
         )
     
-    # Notify moderator
+    # Notify moderator (in Russian)
     await callback.message.edit_text(
-        "✅ <b>Published Successfully!</b>\n\n"
-        f"Poster #{poster_id} is now live in the channel.",
+        "✅ <b>Опубликовано успешно!</b>\n\n"
+        f"Афиша #{poster_id} теперь в канале.",
         parse_mode="HTML"
     )
     
-    # ✅ Notify user (fetch from DB, not FSM)
-    notify_text = (
-        "🎉 <b>Your poster was approved!</b>\n\n"
-        f"{'It was published anonymously.' if data.get('is_anonymous') else 'It was published with your name.'}\n"
-        f"Check the channel!"
-    )
+    # Notify user (in Russian)
+    anon_text = t("notifications.approved.anon_yes", language) if data.get("is_anonymous") else t("notifications.approved.anon_no", language)
+    
+    if config.debug_mode:
+        notify_text = t("notifications.approved.debug", language, anon_text=anon_text)
+    else:
+        notify_text = t("notifications.approved.production", language, anon_text=anon_text)
     
     await callback.bot.send_message(
-        chat_id=user_id,  # ← From DB
+        chat_id=user_id,
         text=notify_text,
         parse_mode="HTML"
     )
     
-    await state.clear()  # ✅ Moderator DM FSM ends here
+    await state.clear()
     logger.info(f"Poster {poster_id} finally published by moderator {callback.from_user.id}")
 
 
 @moderator_edit_router.callback_query(ModeratorEdit.waiting_for_confirmation, F.data.startswith("moderator:edit:"))
 async def edit_again(callback: types.CallbackQuery, state: FSMContext):
     """Let moderator edit description again"""
+    
+    language = i18n.get_user_language(callback.from_user.language_code)
+    
     await state.set_state(ModeratorEdit.waiting_for_description)
     
     await callback.message.edit_text(
-        "✏️ <b>Edit Final Description</b>\n\n"
-        "Send the final text for this post.",
+        "✏️ <b>Редактировать финальное описание</b>\n\n"
+        "Отправьте финальный текст для этой публикации.",
         parse_mode="HTML"
     )
     await callback.answer()
@@ -607,26 +611,67 @@ async def edit_again(callback: types.CallbackQuery, state: FSMContext):
 @moderator_edit_router.callback_query(ModeratorEdit.waiting_for_confirmation, F.data.startswith("moderator:cancel:"))
 async def final_cancel(callback: types.CallbackQuery, state: FSMContext):
     """Cancel final publishing - return to pending"""
+    
+    language = i18n.get_user_language(callback.from_user.language_code)
+    poster_id = int(callback.data.split(":")[2])
     data = await state.get_data()
-    poster_id = data.get("poster_id")
+    moderator_id = callback.from_user.id
     
     with get_session() as session:
+        # Get poster info
+        poster = get_poster(session, poster_id)
+        
+        # ✅ Reset to PENDING
         update_poster_status(
             session=session,
             poster_id=poster_id,
             status=ModerationStatus.PENDING.value
         )
+        
+        # ✅ Re-send poster to moderation chat with original keyboard
+        try:
+            from bot.keyboards import moderation_keyboard
+            from utils.helpers import format_moderation_caption
+            
+            mod_caption = format_moderation_caption({
+                "caption": poster.caption,
+                "user_id": poster.user_id,
+                "is_anonymous": poster.is_anonymous,
+                "event_date": poster.event_date.isoformat() if poster.event_date else None
+            }, poster.id)
+            
+            keyboard = moderation_keyboard(
+                user_id=poster.user_id,
+                is_anonymous=poster.is_anonymous,
+                poster_id=poster.id,
+                language=language
+            ).as_markup()
+            
+            # Send new message to moderation chat
+            await callback.bot.send_photo(
+                chat_id=config.moderation_chat_id,
+                photo=poster.photo_file_id,
+                caption=(
+                    f"{mod_caption}\n\n"
+                    f"⬅️ <i>Возвращено в очередь после отмены финализации</i>\n"
+                    f"👤 Предыдущий модератор: @{callback.from_user.username or 'no_username'}"
+                ),
+                parse_mode="HTML",
+                reply_markup=keyboard
+            )
+        except Exception as e:
+            logger.error(f"Could not re-send poster to moderation chat: {e}")
     
+    # ✅ Notify moderator in DM
     await callback.message.edit_text(
-        "❌ <b>Cancelled</b>\n\n"
-        f"Poster #{poster_id} returned to moderation queue.",
+        f"{t('common.operation_cancelled', language)}\n\n"
+        f"Афиша #{poster_id} возвращена в очередь модерации.",
         parse_mode="HTML"
     )
     
-    await state.clear()  # ✅ Moderator DM FSM ends here
+    await state.clear()
     await callback.answer()
-    logger.info(f"Poster {poster_id} cancelled by moderator {callback.from_user.id}")
-
+    logger.info(f"Poster {poster_id} cancelled by moderator {moderator_id} - returned to queue")
 
 # =============================================================================
 # ============ ADMIN COMMANDS (Optional) ======================================
@@ -635,11 +680,14 @@ async def final_cancel(callback: types.CallbackQuery, state: FSMContext):
 @moderation_router.message(Command("pending"), F.from_user.id.in_(config.admin_ids))
 async def cmd_pending(message: types.Message):
     """Show pending posters count"""
+    
+    language = i18n.get_user_language(message.from_user.language_code)  # ← ADDED
+    
     with get_session() as session:
         count = get_pending_posters_count(session)
     
     await message.answer(
-        f"⏳ <b>Pending posters:</b> <code>{count}</code>",
+        f"{t('moderation.pending.title', language)} {t('moderation.pending.count', language, count=count)}",
         parse_mode="HTML"
     )
 
@@ -647,17 +695,18 @@ async def cmd_pending(message: types.Message):
 @moderation_router.message(Command("mystats"), F.from_user.id.in_(config.admin_ids))
 async def cmd_moderator_stats(message: types.Message):
     """Show moderator's personal statistics"""
+    
+    language = i18n.get_user_language(message.from_user.language_code)  # ← ADDED
     moderator_id = message.from_user.id
     
     with get_session() as session:
-        from db.crud import get_moderator_stats
         stats = get_moderator_stats(session, moderator_id)
     
     await message.answer(
-        "📊 <b>Your Moderation Stats</b>\n\n"
-        f"Total reviewed: <b>{stats['total']}</b>\n"
-        f"✅ Approved: <b>{stats['approved']}</b>\n"
-        f"❌ Declined: <b>{stats['declined']}</b>\n"
-        f"⏳ Pending Final: <b>{stats['pending_final']}</b>",
+        f"{t('moderation.moderator_stats.title', language)}\n\n"
+        f"{t('moderation.moderator_stats.total', language)}: <b>{stats['total']}</b>\n"
+        f"{t('moderation.moderator_stats.approved', language)}: <b>{stats['approved']}</b>\n"
+        f"{t('moderation.moderator_stats.declined', language)}: <b>{stats['declined']}</b>\n"
+        f"{t('moderation.moderator_stats.pending_final', language)}: <b>{stats['pending_final']}</b>",
         parse_mode="HTML"
     )

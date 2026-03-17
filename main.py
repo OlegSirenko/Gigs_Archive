@@ -11,7 +11,8 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from config import config
 from db.models import init_db
-from bot.handlers import commands_router, poster_router, moderation_router
+from bot.handlers import commands_router, poster_router
+from bot.moderator_handlers import moderation_router, moderator_edit_router
 
 # Setup logging
 logging.basicConfig(
@@ -28,7 +29,7 @@ bot = Bot(
 dp = Dispatcher()
 
 # Include all routers
-dp.include_routers(commands_router, poster_router, moderation_router)
+dp.include_routers(commands_router, poster_router, moderation_router, moderator_edit_router)
 
 async def main():
     """Main entry point"""

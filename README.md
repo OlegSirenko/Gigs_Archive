@@ -9,10 +9,15 @@ Gigs_Archive/
 │
 ├── db/                  # Database layer
 │   ├── models.py        # SQLAlchemy tables (User, Poster)
+|   ├── add_indexes.py
+|   ├── add_columns.py 
 │   └── crud.py          # DB operations (create, read, update)
+
 │
 ├── bot/                 # Telegram bot logic
 │   ├── handlers.py      # All routers (commands, poster, moderation)
+|   ├── moderator_handlers.py 
+|   ├── moderator_states 
 │   ├── keyboards.py     # All inline keyboards
 │   └── states.py        # FSM states for poster flow
 │

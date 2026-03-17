@@ -113,6 +113,7 @@ def get_posters_by_week(
         Poster.moderated_at <= end_date
     ).order_by(Poster.event_date.asc()).all()
 
+
 def update_poster_status(
     session: Session,
     poster_id: int,
@@ -120,7 +121,7 @@ def update_poster_status(
     moderator_id: int = None,
     channel_message_id: int = None,
     channel_chat_id: int = None,
-    decline_reason: str = None  # ← ADD THIS
+    decline_reason: str = None 
 ) -> Optional[Poster]:
     """Update poster moderation status"""
     poster = session.query(Poster).filter(Poster.id == poster_id).first()
@@ -132,8 +133,88 @@ def update_poster_status(
         poster.channel_message_id = channel_message_id
         poster.channel_chat_id = channel_chat_id
         if decline_reason:
-            poster.decline_reason = decline_reason  # ← ADD THIS
+            poster.decline_reason = decline_reason 
         session.commit()
         session.refresh(poster)
     
     return poster
+
+
+def get_pending_posters_count(session: Session) -> int:
+    """Fast count of pending posters (for admin dashboard)"""
+    return session.query(Poster).filter(
+        Poster.status == ModerationStatus.PENDING
+    ).count()
+
+
+def get_posters_by_date_range(
+    session: Session,
+    start_date: datetime,
+    end_date: datetime,
+    status: ModerationStatus = ModerationStatus.APPROVED,
+    limit: int = 100
+) -> List[Poster]:
+    """Optimized query for weekly summary"""
+    return session.query(Poster).filter(
+        Poster.status == status,
+        Poster.moderated_at >= start_date,
+        Poster.moderated_at <= end_date
+    ).order_by(Poster.event_date.asc()).limit(limit).all()
+
+
+def get_user_posters_paginated(
+    session: Session,
+    telegram_id: int,
+    offset: int = 0,
+    limit: int = 20
+) -> List[Poster]:
+    """Paginated user posters (for /mystats with history)"""
+    return session.query(Poster).filter(
+        Poster.user_id == telegram_id
+    ).order_by(Poster.created_at.desc()).offset(offset).limit(limit).all()
+
+
+def get_moderator_stats(session: Session, moderator_id: int) -> dict:
+    """Get moderator's approval/decline statistics"""
+    posters = session.query(Poster).filter(
+        Poster.moderated_by == moderator_id
+    ).all()
+    
+    return {
+        "total": len(posters),
+        "approved": sum(1 for p in posters if p.status == ModerationStatus.APPROVED),
+        "declined": sum(1 for p in posters if p.status == ModerationStatus.DECLINED),
+        "pending_final": sum(1 for p in posters if p.status == ModerationStatus.PENDING_FINAL)
+    }
+
+
+def get_upcoming_events(
+    session: Session,
+    days_ahead: int = 7,
+    limit: int = 50
+) -> List[Poster]:
+    """Get approved upcoming events (for reminders/summaries)"""
+    from datetime import timedelta
+    today = datetime.now()
+    future = today + timedelta(days=days_ahead)
+    
+    return session.query(Poster).filter(
+        Poster.status == ModerationStatus.APPROVED,
+        Poster.event_date >= today,
+        Poster.event_date <= future
+    ).order_by(Poster.event_date.asc()).limit(limit).all()
+
+
+def get_all_users_count(session: Session) -> int:
+    """Fast count of all users"""
+    return session.query(User).count()
+
+
+def get_active_users_count(session: Session, days: int = 30) -> int:
+    """Count users who submitted posters in last N days"""
+    from datetime import timedelta
+    cutoff = datetime.now() - timedelta(days=days)
+    
+    return session.query(User).join(Poster).filter(
+        Poster.created_at >= cutoff
+    ).distinct().count()

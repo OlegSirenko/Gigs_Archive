@@ -48,21 +48,12 @@ async def main():
         logger.info(f"💾 Database: {config.database_path}")
         logger.info(f"📢 Main Channel: {config.main_channel_id}")
         logger.info(f"🔍 Moderation Chat: {config.moderation_chat_id}")
-        
-        print("🔍 Loaded Config Values:")
-        print(f"  MODERATION_CHAT_ID: {config.moderation_chat_id}")
-        print(f"  MAIN_CHANNEL_ID: {config.main_channel_id}")
-        print(f"  TEST_CHANNEL_ID: {config.test_channel_id}")
-        print(f"  ADMIN_IDS: {config.admin_ids}")
+    
 
         # Set commands menu
         await bot.set_my_commands([
             types.BotCommand(command="start", description="🚀 Start the bot"),
             types.BotCommand(command="help", description="📚 Show all commands"),
-            types.BotCommand(command="ping", description="🏓 Check if bot is alive"),
-            types.BotCommand(command="me", description="👤 Get your Telegram ID"),
-            types.BotCommand(command="chat", description="💬 Get chat info & ID"),
-            types.BotCommand(command="admin", description="🔑 Check admin status"),
             types.BotCommand(command="poster", description="📸 Submit a poster"),
             types.BotCommand(command="stats", description="📊 Your statistics"),
             types.BotCommand(command="cancel", description="❌ Cancel operation"),

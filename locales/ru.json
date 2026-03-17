@@ -172,5 +172,25 @@
     "no_events": "📭 На этой неделе не было одобрено ни одного события.",
     "footer": "Подборка создана ботом Гиги Архив",
     "by_date": "🗓️ {date} ({count} событий)"
+  },
+  "keyboards": {
+    "moderation": {
+      "approve": "✅ Одобрить",
+      "decline": "❌ Отклонить",
+      "view_user": "👤 View User"
+    },
+    "decline_reasons": {
+      "low_quality": "📷 Низкое качество",
+      "missing_details": "📝 Нет деталей",
+      "inappropriate": "🚫 Недопустимый контент",
+      "wrong_date": "📅 Неверная дата",
+      "duplicate": "🔄 Дубликат",
+      "custom": "⚠️ Другое"
+    },
+    "moderator": {
+      "skip": "⏭️ Пропустить — использовать оригинал",
+      "publish": "✅ Опубликовать в канале",
+      "edit_again": "✏️ Редактировать ещё раз"
+    }
   }
 }

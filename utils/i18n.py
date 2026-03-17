@@ -125,7 +125,39 @@ class i18n:
         return cls.PROJECT_NAME
 
 
-# Convenience function for shorter imports
+    @classmethod
+    def get_day_name(cls, date, language: str = "ru") -> str:
+        """Get localized day name abbreviation (Mon, Tue, etc.)"""
+        day_names = {
+            "ru": ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+            "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+            # Add more languages as needed
+        }
+        
+        # Get list for language, fallback to English
+        names = day_names.get(language, day_names["en"])
+        
+        # strftime weekday: Monday=0, Sunday=6
+        return names[date.weekday()]
+    
+    @classmethod
+    def get_month_name(cls, date, language: str = "ru") -> str:
+        """Get localized month name abbreviation (Jan, Feb, etc.)"""
+        month_names = {
+            "ru": ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"],
+            "en": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+        }
+        
+        names = month_names.get(language, month_names["en"])
+        return names[date.month - 1]
+    
 def t(key: str, language: str = None, **kwargs) -> str:
-    """Shortcut for i18n.t()"""
+    """
+    Shortcut for i18n.t()
+
+    Usage:
+    from utils.i18n import t
+    t("commands.start.title")
+    t("notifications.approved.production", anon_text="...")
+        """
     return i18n.t(key, language, **kwargs)

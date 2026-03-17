@@ -1,68 +1,71 @@
+# bot/keyboards.py
 """
-All inline keyboards for the bot.
+All inline keyboards for Гиги Архив bot.
 Separated into User and Moderator sections for clarity.
 """
 
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 from datetime import datetime, timedelta
+from utils.i18n import i18n, t
 
 # =============================================================================
 # ============ USER KEYBOARDS (Poster Submission Flow) ========================
 # =============================================================================
 
-def cancel_keyboard() -> InlineKeyboardBuilder:
+def cancel_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     """Cancel submission keyboard (shown at every step)"""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="❌ Cancel submission", callback_data="poster:cancel")
+        InlineKeyboardButton(text=t("common.cancel", language), callback_data="poster:cancel")
     )
     return builder
 
 
-def retry_keyboard() -> InlineKeyboardBuilder:
+def retry_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     """Keyboard shown after validation error"""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="🔄 Try Again", callback_data="poster:retry_photo")
+        InlineKeyboardButton(text=t("poster_flow.retry.button", language), callback_data="poster:retry_photo")
     )
     return builder
 
 
-def start_over_keyboard() -> InlineKeyboardBuilder:
+def start_over_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     """Keyboard shown after cancellation (if photo was sent)"""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="🔄 Start Over", callback_data="poster:start_over")
+        InlineKeyboardButton(text=t("poster_flow.start_over.button", language), callback_data="poster:start_over")
     )
     return builder
 
 
-def anonymous_choice_keyboard() -> InlineKeyboardBuilder:
+def anonymous_choice_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     """Choose anonymous or public posting"""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="👤 Show my name", callback_data="anon:no"),
-        InlineKeyboardButton(text="🔒 Post anonymously", callback_data="anon:yes")
+        InlineKeyboardButton(text=t("poster_flow.anonymous.show_name", language), callback_data="anon:no"),
+        InlineKeyboardButton(text=t("poster_flow.anonymous.anonymous", language), callback_data="anon:yes")
     )
     builder.row(
-        InlineKeyboardButton(text="⬅️ Back", callback_data="poster:back_to_photo")
+        InlineKeyboardButton(text=t("common.back", language), callback_data="poster:back_to_photo")
     )
     return builder
 
 
-def date_picker_keyboard() -> InlineKeyboardBuilder:
+def date_picker_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     """Simple date picker with next 14 days (3 buttons per row for bigger size)"""
     builder = InlineKeyboardBuilder()
     
     today = datetime.now().date()
     
-    # Add next 14 days as buttons (3 per row = bigger buttons)
     row_buttons = []
     for i in range(14):
         date = today + timedelta(days=i)
-        day_name = date.strftime("%a")  # Mon, Tue, Wed...
-        day_num = date.strftime("%d.%m")  # 15.03, 16.03...
+        
+        # ✅ Use localized day name
+        day_name = i18n.get_day_name(date, language)
+        day_num = date.strftime("%d.%m")  # Keep numeric date format
         
         row_buttons.append(
             InlineKeyboardButton(
@@ -71,32 +74,29 @@ def date_picker_keyboard() -> InlineKeyboardBuilder:
             )
         )
         
-        # Add row every 3 buttons 
         if len(row_buttons) == 3:
             builder.row(*row_buttons)
             row_buttons = []
     
-    # Add remaining buttons
     if row_buttons:
         builder.row(*row_buttons)
     
-    # Add back button
     builder.row(
-        InlineKeyboardButton(text="⬅️ Back", callback_data="poster:back_to_anon")
+        InlineKeyboardButton(text=t("common.back", language), callback_data="poster:back_to_anon")
     )
     
     return builder
 
 
-def confirmation_keyboard() -> InlineKeyboardBuilder:
+def confirmation_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     """Final confirmation before submission"""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="✅ Publish", callback_data="poster:confirm"),
-        InlineKeyboardButton(text="✏️ Edit", callback_data="poster:edit")
+        InlineKeyboardButton(text=t("poster_flow.confirmation.publish", language), callback_data="poster:confirm"),
+        InlineKeyboardButton(text=t("poster_flow.confirmation.edit", language), callback_data="poster:edit")
     )
     builder.row(
-        InlineKeyboardButton(text="❌ Cancel", callback_data="poster:cancel")
+        InlineKeyboardButton(text=t("common.cancel", language), callback_data="poster:cancel")
     )
     return builder
 
@@ -105,27 +105,26 @@ def confirmation_keyboard() -> InlineKeyboardBuilder:
 # ============ MODERATOR KEYBOARDS (Moderation Flow) ==========================
 # =============================================================================
 
-def moderation_keyboard(user_id: int, is_anonymous: bool, poster_id: int) -> InlineKeyboardBuilder:
+def moderation_keyboard(user_id: int, is_anonymous: bool, poster_id: int, language: str = "ru") -> InlineKeyboardBuilder:
     """Keyboard for moderators (approve/decline)"""
     builder = InlineKeyboardBuilder()
     anon_flag = "1" if is_anonymous else "0"
     
     builder.row(
         InlineKeyboardButton(
-            text="✅ Approve",
+            text=t("keyboards.moderation.approve", language),
             callback_data=f"approve:{user_id}:{anon_flag}:{poster_id}"
         ),
         InlineKeyboardButton(
-            text="❌ Decline",
+            text=t("keyboards.moderation.decline", language),
             callback_data=f"decline:{user_id}:{anon_flag}:{poster_id}"
         )
     )
     
-    # Optional: View user info (only if not anonymous)
     if not is_anonymous:
         builder.row(
             InlineKeyboardButton(
-                text="👤 View User",
+                text=t("keyboards.moderation.view_user", language),
                 callback_data=f"userinfo:{user_id}"
             )
         )
@@ -133,22 +132,20 @@ def moderation_keyboard(user_id: int, is_anonymous: bool, poster_id: int) -> Inl
     return builder
 
 
-def decline_reason_keyboard(user_id: int, anon_flag: str, poster_id: int) -> InlineKeyboardBuilder:
+def decline_reason_keyboard(user_id: int, anon_flag: str, poster_id: int, language: str = "ru") -> InlineKeyboardBuilder:
     """Keyboard for selecting decline reason"""
     builder = InlineKeyboardBuilder()
     
-    # Predefined reasons
     reasons = [
-        ("📷 Low image quality", "low_quality"),
-        ("📝 Missing event details", "missing_details"),
-        ("🚫 Inappropriate content", "inappropriate"),
-        ("📅 Wrong date/past event", "wrong_date"),
-        ("🔄 Duplicate submission", "duplicate"),
-        ("⚠️ Other (custom)", "custom")
+        (t("keyboards.decline_reasons.low_quality", language), "low_quality"),
+        (t("keyboards.decline_reasons.missing_details", language), "missing_details"),
+        (t("keyboards.decline_reasons.inappropriate", language), "inappropriate"),
+        (t("keyboards.decline_reasons.wrong_date", language), "wrong_date"),
+        (t("keyboards.decline_reasons.duplicate", language), "duplicate"),
+        (t("keyboards.decline_reasons.custom", language), "custom")
     ]
     
     for text, reason_code in reasons:
-        # Format: decline_reason:reason_code:user_id:anon_flag:poster_id
         builder.row(
             InlineKeyboardButton(
                 text=text,
@@ -156,10 +153,9 @@ def decline_reason_keyboard(user_id: int, anon_flag: str, poster_id: int) -> Inl
             )
         )
     
-    # Cancel button
     builder.row(
         InlineKeyboardButton(
-            text="❌ Cancel", 
+            text=t("common.cancel", language), 
             callback_data=f"moderation:cancel_decline:{user_id}:{anon_flag}:{poster_id}"
         )
     )
@@ -167,23 +163,32 @@ def decline_reason_keyboard(user_id: int, anon_flag: str, poster_id: int) -> Inl
     return builder
 
 
-def moderator_skip_keyboard() -> InlineKeyboardBuilder:
+def moderator_skip_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     """Keyboard for moderator to skip description editing"""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="⏭️ Skip - Use Original", callback_data="moderator:skip_description")
+        InlineKeyboardButton(
+            text=t("keyboards.moderator.skip", language),
+            callback_data="moderator:skip_description"
+        )
     )
     return builder
 
 
-def moderator_confirmation_keyboard() -> InlineKeyboardBuilder:
+def moderator_confirmation_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     """Keyboard for moderator final confirmation in DM"""
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="✅ Publish to Channel", callback_data="moderator:final_confirm"),
-        InlineKeyboardButton(text="✏️ Edit Again", callback_data="moderator:edit_again")
+        InlineKeyboardButton(
+            text=t("keyboards.moderator.publish", language),
+            callback_data="moderator:final_confirm"
+        ),
+        InlineKeyboardButton(
+            text=t("keyboards.moderator.edit_again", language),
+            callback_data="moderator:edit_again"
+        )
     )
     builder.row(
-        InlineKeyboardButton(text="❌ Cancel", callback_data="moderator:final_cancel")
+        InlineKeyboardButton(text=t("common.cancel", language), callback_data="moderator:final_cancel")
     )
     return builder

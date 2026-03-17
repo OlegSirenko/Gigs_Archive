@@ -1,3 +1,4 @@
+# bot/handlers.py
 """
 User-facing bot handlers (commands, poster submission flow).
 NO moderation logic here!
@@ -21,6 +22,7 @@ from bot.keyboards import (
 from db.models import get_session
 from db.crud import get_or_create_user, create_poster, get_user_stats
 from utils.helpers import format_preview_text, validate_caption
+from utils.i18n import i18n, t  # ← ADDED
 from config import config
 from datetime import datetime
 
@@ -58,37 +60,39 @@ async def safe_edit_text(message: types.Message, text: str, reply_markup=None):
 @commands_router.message(Command("start"))
 async def cmd_start(message: types.Message):
     """Handle /start command"""
+    language = i18n.get_user_language(message.from_user.language_code)
+    
+    # ✅ Load steps array and format with numbers
+    steps_list = i18n.t('commands.start.steps', language)  # Returns the array
+    if isinstance(steps_list, list):
+        steps = "\n".join([f"{i}. {step}" for i, step in enumerate(steps_list, 1)])
+    else:
+        # Fallback if steps is a string
+        steps = steps_list
+    
     await message.answer(
-        "👋 <b>Welcome to Poster Bot!</b>\n\n"
-        "I help you submit event posters for moderation and publication.\n\n"
-        "📸 <b>How to submit a poster:</b>\n"
-        "1. Use /poster command\n"
-        "2. Send a photo with event details\n"
-        "3. Choose anonymous or public\n"
-        "4. Select event date\n"
-        "5. Confirm and submit!\n\n"
-        "All submissions are moderated before publishing to the channel.\n\n"
-        "Use /help for more commands."
+        f"{t('commands.start.title', language)}\n\n"
+        f"{t('commands.start.description', language)}\n\n"
+        f"{t('commands.start.how_to', language)}\n"
+        f"{steps}\n\n"
+        f"{t('commands.start.footer', language)}",
+        parse_mode="HTML"
     )
 
 @commands_router.message(Command("help"))
 async def cmd_help(message: types.Message):
     """Show all available commands"""
+    language = i18n.get_user_language(message.from_user.language_code)  # ← ADDED
+    
     help_text = (
-        "📚 <b>Available Commands</b>\n\n"
-        "🔹 <b>General</b>\n"
-        "  /start - Start the bot\n"
-        "  /help - Show this help message\n"
-        "  /ping - Check if bot is alive\n\n"
-        "🔹 <b>Info</b>\n"
-        "  /me - Get your Telegram ID\n"
-        "  /chat - Get chat information & ID\n"
-        "  /admin - Check admin status\n\n"
-        "🔹 <b>Posters</b>\n"
-        "  /poster - Submit a new poster\n"
-        "  /stats - Your submission statistics\n"
-        "  /cancel - Cancel current operation\n\n"
-        "<i>All posters are moderated before publication.</i>"
+        f"{t('commands.help.title', language)}\n\n"
+        f"{t('commands.help.general_title', language)}\n"
+        f"  {t('commands.help.general_commands', language)}\n\n"
+        f"{t('commands.help.info_title', language)}\n"
+        f"  {t('commands.help.info_commands', language)}\n\n"
+        f"{t('commands.help.posters_title', language)}\n"
+        f"  {t('commands.help.posters_commands', language)}\n\n"
+        f"{t('commands.help.footer', language)}"
     )
     await message.answer(help_text, parse_mode="HTML")
 
@@ -110,12 +114,17 @@ async def cmd_poster(message: types.Message, state: FSMContext):
             is_premium=message.from_user.is_premium or False
         )
     
+    language = i18n.get_user_language(message.from_user.language_code)  # ← ADDED
+    
     sent = await message.answer(
-        "📸 <b>Send Your Poster</b>\n\n"
-        "Attach a photo and add a caption with event details.\n"
-        "You can edit everything before publishing!",
+        f"{t('poster_flow.start.title', language)}\n\n"
+        f"{t('poster_flow.start.description', language)}\n"
+        f"{t('poster_flow.start.edit_hint', language)}\n"
+        f"{t('poster_flow.start.cancel_hint', language)}\n\n"
+        f"{t('poster_flow.start.examples_title', language)}\n"
+        f"{t('poster_flow.start.examples', language)}",
         parse_mode="HTML",
-        reply_markup=cancel_keyboard().as_markup()
+        reply_markup=cancel_keyboard(language).as_markup()  # ← ADDED language param
     )
     
     # Store message IDs for cleanup
@@ -128,28 +137,32 @@ async def cmd_poster(message: types.Message, state: FSMContext):
 @commands_router.message(Command("stats"))
 async def cmd_stats(message: types.Message):
     """Show user statistics"""
+    language = i18n.get_user_language(message.from_user.language_code)  # ← ADDED
+    
     with get_session() as session:
         stats = get_user_stats(session, message.from_user.id)
     
     await message.answer(
-        "📊 <b>Your Statistics</b>\n\n"
-        f"Total submissions: <b>{stats['total']}</b>\n"
-        f"✅ Approved: <b>{stats['approved']}</b>\n"
-        f"❌ Declined: <b>{stats['declined']}</b>\n"
-        f"⏳ Pending: <b>{stats['pending']}</b>",
+        f"{t('commands.stats.title', language)}\n\n"
+        f"{t('commands.stats.total', language)}: <b>{stats['total']}</b>\n"
+        f"{t('commands.stats.approved', language)}: <b>{stats['approved']}</b>\n"
+        f"{t('commands.stats.declined', language)}: <b>{stats['declined']}</b>\n"
+        f"{t('commands.stats.pending', language)}: <b>{stats['pending']}</b>",
         parse_mode="HTML"
     )
 
 @commands_router.message(Command("cancel"))
 async def cmd_cancel(message: types.Message, state: FSMContext):
     """Cancel current operation"""
+    language = i18n.get_user_language(message.from_user.language_code)  # ← ADDED
+    
     current_state = await state.get_state()
     if current_state is None:
-        await message.answer("✅ No active operation to cancel.")
+        await message.answer(t('common.no_active_operation', language))  # ← CHANGED
         return
     
     await state.clear()
-    await message.answer("❌ Operation cancelled.")
+    await message.answer(t('common.operation_cancelled', language))  # ← CHANGED
     logger.info(f"Submission cancelled by user {message.from_user.id}")
 
 # ============ POSTER FLOW - STEP 1: PHOTO ============
@@ -157,6 +170,7 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
 @poster_router.message(PosterSubmission.waiting_for_photo, F.photo)
 async def process_photo(message: types.Message, state: FSMContext):
     """Handle photo submission with caption validation"""
+    language = i18n.get_user_language(message.from_user.language_code)  # ← ADDED
     caption = message.caption or ""
     
     # Validate caption (just check for link)
@@ -188,10 +202,12 @@ async def process_photo(message: types.Message, state: FSMContext):
         
         # Send error message with retry button
         await message.answer(
-            f"{error_message}\n\n"
-            "<i>Click the button below to try again.</i>",
+            f"{t('poster_flow.validation_error.no_link', language)}\n\n"
+            f"{t('poster_flow.validation_error.examples_title', language)}\n"
+            f"{t('poster_flow.validation_error.examples', language)}\n\n"
+            f"{t('poster_flow.validation_error.retry_hint', language)}",
             parse_mode="HTML",
-            reply_markup=retry_keyboard().as_markup()
+            reply_markup=retry_keyboard(language).as_markup()  # ← ADDED language param
         )
         
         # Delete user's photo
@@ -237,10 +253,10 @@ async def process_photo(message: types.Message, state: FSMContext):
     
     # Send next step
     sent = await message.answer(
-        "🔐 <b>Privacy Settings</b>\n\n"
-        "Should your name be shown with this poster?",
+        f"{t('poster_flow.anonymous.title', language)}\n\n"
+        f"{t('poster_flow.anonymous.description', language)}",
         parse_mode="HTML",
-        reply_markup=anonymous_choice_keyboard().as_markup()
+        reply_markup=anonymous_choice_keyboard(language).as_markup()  # ← ADDED language param
     )
     
     await state.update_data(prev_bot_message_id=sent.message_id)
@@ -248,9 +264,9 @@ async def process_photo(message: types.Message, state: FSMContext):
 @poster_router.message(PosterSubmission.waiting_for_photo, ~F.photo)
 async def invalid_photo(message: types.Message):
     """Reject non-photo messages"""
+    language = i18n.get_user_language(message.from_user.language_code)  # ← ADDED
     await message.answer(
-        "⚠️ Please send a <b>photo</b> for your poster.\n"
-        "You can add a caption with event details.",
+        t('poster_flow.invalid_photo.text', language),  # ← CHANGED
         parse_mode="HTML"
     )
 
@@ -259,18 +275,23 @@ async def invalid_photo(message: types.Message):
 @poster_router.callback_query(PosterSubmission.waiting_for_anonymous, F.data.startswith("anon:"))
 async def process_anonymous(callback: types.CallbackQuery, state: FSMContext):
     """Handle anonymous preference"""
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     is_anonymous = callback.data.split(":")[1] == "yes"
     await state.update_data(is_anonymous=is_anonymous)
     await state.set_state(PosterSubmission.waiting_for_date)
     
+    # ← CHANGED: Use translation for selected mode
+    selected_text = t('poster_flow.anonymous.selected_anon', language) if is_anonymous else t('poster_flow.anonymous.selected_public', language)
+    
     await safe_edit_text(
         callback.message,
         text=(
-            f"{'🔒 Anonymous' if is_anonymous else '👤 Public'} mode selected.\n\n"
-            "📅 <b>When is the event?</b>\n"
-            "<i>Select a date from the options below:</i>"
+            f"{selected_text}\n\n"
+            f"{t('poster_flow.date.title', language)}\n"
+            f"{t('poster_flow.date.description', language)}"
         ),
-        reply_markup=date_picker_keyboard().as_markup()
+        reply_markup=date_picker_keyboard(language).as_markup()  # ← ADDED language param
     )
     
     await state.update_data(prev_bot_message_id=callback.message.message_id)
@@ -279,15 +300,17 @@ async def process_anonymous(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(PosterSubmission.waiting_for_anonymous, F.data == "poster:back_to_photo")
 async def back_to_photo(callback: types.CallbackQuery, state: FSMContext):
     """Go back to photo step"""
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     await state.set_state(PosterSubmission.waiting_for_photo)
     
     await safe_edit_text(
         callback.message,
         text=(
-            "📸 <b>Send Your Poster</b>\n\n"
-            "Attach a photo and add a caption with event details."
+            f"{t('poster_flow.start.title', language)}\n\n"
+            f"{t('poster_flow.start.description', language)}"
         ),
-        reply_markup=cancel_keyboard().as_markup()
+        reply_markup=cancel_keyboard(language).as_markup()  # ← ADDED language param
     )
     
     await state.update_data(prev_bot_message_id=callback.message.message_id)
@@ -298,6 +321,8 @@ async def back_to_photo(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(PosterSubmission.waiting_for_date, F.data.startswith("date:"))
 async def process_date_selection(callback: types.CallbackQuery, state: FSMContext):
     """Handle date selection from custom picker"""
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     date_str = callback.data.split(":")[1]
     
     await state.update_data(event_date=date_str)
@@ -308,8 +333,12 @@ async def process_date_selection(callback: types.CallbackQuery, state: FSMContex
     
     await safe_edit_text(
         callback.message,
-        text=preview_text,
-        reply_markup=confirmation_keyboard().as_markup()
+        text=(
+            f"{t('poster_flow.confirmation.title', language)}\n\n"
+            f"{preview_text}\n\n"
+            f"{t('poster_flow.confirmation.preview_hint', language)}"
+        ),
+        reply_markup=confirmation_keyboard(language).as_markup()  # ← ADDED language param
     )
     
     await state.update_data(prev_bot_message_id=callback.message.message_id)
@@ -318,19 +347,24 @@ async def process_date_selection(callback: types.CallbackQuery, state: FSMContex
 @poster_router.callback_query(PosterSubmission.waiting_for_date, F.data == "poster:back_to_anon")
 async def back_to_anonymous(callback: types.CallbackQuery, state: FSMContext):
     """Go back to anonymous selection"""
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     await state.set_state(PosterSubmission.waiting_for_anonymous)
     
     data = await state.get_data()
     is_anonymous = data.get("is_anonymous", False)
     
+    # ← CHANGED: Use translation for selected mode
+    selected_text = t('poster_flow.anonymous.selected_anon', language) if is_anonymous else t('poster_flow.anonymous.selected_public', language)
+    
     await safe_edit_text(
         callback.message,
         text=(
-            f"{'🔒 Anonymous' if is_anonymous else '👤 Public'} mode selected.\n\n"
-            "🔐 <b>Privacy Settings</b>\n\n"
-            "Should your name be shown with this poster?"
+            f"{selected_text}\n\n"
+            f"{t('poster_flow.anonymous.title', language)}\n\n"
+            f"{t('poster_flow.anonymous.description', language)}"
         ),
-        reply_markup=anonymous_choice_keyboard().as_markup()
+        reply_markup=anonymous_choice_keyboard(language).as_markup()  # ← ADDED language param
     )
     
     await state.update_data(prev_bot_message_id=callback.message.message_id)
@@ -341,6 +375,7 @@ async def back_to_anonymous(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(PosterSubmission.waiting_for_confirmation, F.data == "poster:confirm")
 async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
     """Save poster to database and send to moderation"""
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
     data = await state.get_data()
     
     try:
@@ -354,7 +389,7 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
                 is_anonymous=data['is_anonymous']
             )
             
-            # Send to moderation chat (moderator_handlers.py will handle the rest)
+            # Send to moderation chat
             from bot.keyboards import moderation_keyboard
             from utils.helpers import format_moderation_caption
             
@@ -362,7 +397,8 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
             keyboard = moderation_keyboard(
                 user_id=data['user_id'],
                 is_anonymous=data['is_anonymous'],
-                poster_id=poster.id
+                poster_id=poster.id,
+                language=language  # ← ADDED language param
             ).as_markup()
             
             await callback.bot.send_photo(
@@ -376,9 +412,8 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
         await safe_edit_text(
             callback.message,
             text=(
-                "✅ <b>Poster Submitted!</b>\n\n"
-                "Your poster is now in the moderation queue.\n"
-                "You'll be notified once it's reviewed."
+                f"{t('poster_flow.success.title', language)}\n\n"
+                f"{t('poster_flow.success.description', language)}"
             ),
             reply_markup=None
         )
@@ -388,11 +423,13 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
         
     except Exception as e:
         logger.error(f"Submission failed: {e}")
-        await callback.answer("⚠️ Error submitting poster. Try again.", show_alert=True)
+        await callback.answer(t('common.error', language), show_alert=True)  # ← CHANGED
 
 @poster_router.callback_query(PosterSubmission.waiting_for_confirmation, F.data == "poster:edit")
 async def edit_submission(callback: types.CallbackQuery, state: FSMContext):
     """Return to photo step for editing"""
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     await state.set_state(PosterSubmission.waiting_for_photo)
     
     data = await state.get_data()
@@ -400,12 +437,12 @@ async def edit_submission(callback: types.CallbackQuery, state: FSMContext):
     await safe_edit_text(
         callback.message,
         text=(
-            "✏️ <b>Edit Your Poster</b>\n\n"
-            "Send a new photo to replace the current one.\n\n"
-            f"<i>Previous caption:</i>\n"
+            f"{t('poster_flow.edit.title', language)}\n\n"
+            f"{t('poster_flow.edit.description', language)}\n\n"
+            f"{t('poster_flow.edit.previous_caption', language)}\n"
             f"<code>{data.get('caption', 'None')[:100]}{'...' if len(data.get('caption', '')) > 100 else ''}</code>"
         ),
-        reply_markup=cancel_keyboard().as_markup()
+        reply_markup=cancel_keyboard(language).as_markup()  # ← ADDED language param
     )
     
     await state.update_data(prev_bot_message_id=callback.message.message_id)
@@ -414,6 +451,8 @@ async def edit_submission(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(F.data == "poster:cancel")
 async def cancel_submission(callback: types.CallbackQuery, state: FSMContext):
     """Cancel submission from any step"""
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     data = await state.get_data()
     has_photo = "photo_file_id" in data
     
@@ -439,20 +478,11 @@ async def cancel_submission(callback: types.CallbackQuery, state: FSMContext):
     # Send appropriate cancel message
     if has_photo:
         await callback.message.answer(
-            "👋 <b>Welcome to Poster Bot!</b>\n\n"
-            "I help you submit event posters for moderation and publication.\n\n"
-            "📸 <b>How to submit a poster:</b>\n"
-            "1. Use /poster command\n"
-            "2. Send a photo with event details\n"
-            "3. Choose anonymous or public\n"
-            "4. Select event date\n"
-            "5. Confirm and submit!\n\n"
-            "All submissions are moderated before publishing to the channel.\n\n"
-            "Use /help for more commands.",
+            t('poster_flow.cancelled.with_photo', language),  # ← CHANGED
             parse_mode="HTML"
         )
     else:
-        await callback.message.answer("❌ Submission cancelled.")
+        await callback.message.answer(t('poster_flow.cancelled.without_photo', language))  # ← CHANGED
     
     await callback.answer()
     logger.info(f"Submission cancelled by user {callback.from_user.id} (has_photo={has_photo})")
@@ -460,6 +490,8 @@ async def cancel_submission(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(F.data == "poster:retry_photo")
 async def retry_photo(callback: types.CallbackQuery, state: FSMContext):
     """Handle retry after validation error"""
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     # Delete the error message
     try:
         await callback.message.delete()
@@ -468,15 +500,12 @@ async def retry_photo(callback: types.CallbackQuery, state: FSMContext):
     
     # Send fresh instruction
     sent = await callback.message.answer(
-        "📸 <b>Send Your Poster</b>\n\n"
-        "Attach a photo and add a caption with event details.\n"
-        "<b>Don't forget to add at least one link!</b>\n\n"
-        "<i>Examples:</i>\n"
-        "• example.com\n"
-        "• https://tickets.com\n"
-        "• t.me/myevent",
+        f"{t('poster_flow.retry.title', language)}\n\n"
+        f"{t('poster_flow.retry.description', language)}\n\n"
+        f"{t('poster_flow.retry.examples_title', language)}\n"
+        f"{t('poster_flow.retry.examples', language)}",
         parse_mode="HTML",
-        reply_markup=cancel_keyboard().as_markup()
+        reply_markup=cancel_keyboard(language).as_markup()  # ← ADDED language param
     )
     
     await state.update_data(
@@ -484,12 +513,14 @@ async def retry_photo(callback: types.CallbackQuery, state: FSMContext):
         prev_bot_message_id=sent.message_id
     )
     
-    await callback.answer("Ready! Send your photo with a link.")
+    await callback.answer(t('poster_flow.retry.button', language))  # ← CHANGED
     logger.info(f"User {callback.from_user.id} retried photo submission")
 
 @poster_router.callback_query(F.data == "poster:start_over")
 async def start_over(callback: types.CallbackQuery, state: FSMContext):
     """Restart poster submission after cancellation"""
+    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    
     await state.clear()
     await state.set_state(PosterSubmission.waiting_for_photo)
     
@@ -506,11 +537,11 @@ async def start_over(callback: types.CallbackQuery, state: FSMContext):
         )
     
     sent = await callback.message.edit_text(
-        "📸 <b>Send Your Poster</b>\n\n"
-        "Attach a photo and add a caption with event details.\n"
-        "You can edit everything before publishing!",
+        f"{t('poster_flow.start.title', language)}\n\n"
+        f"{t('poster_flow.start.description', language)}\n"
+        f"{t('poster_flow.start.edit_hint', language)}",
         parse_mode="HTML",
-        reply_markup=cancel_keyboard().as_markup()
+        reply_markup=cancel_keyboard(language).as_markup()  # ← ADDED language param
     )
     
     await state.update_data(

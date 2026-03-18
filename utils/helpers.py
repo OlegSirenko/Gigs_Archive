@@ -1,8 +1,22 @@
 # utils/helpers.py
 """Helper functions for formatting and text processing"""
 import re
+from aiogram.types import Message, MessageOriginUser, MessageOriginChat, MessageOriginHiddenUser, MessageOriginChannel
 from datetime import datetime, date
 from typing import Optional, Dict
+from utils.i18n import i18n, t
+
+
+def has_valid_link(text: str) -> bool:
+    """Check if text contains at least one valid URL/link"""
+    if not text:
+        return False
+    
+    # Simple but effective: matches domain.tld with optional protocol/www/path
+    url_pattern = r'((?:https?://)?(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?|t\.me/[^\s]+|telegram\.me/[^\s]+)'
+    
+    return bool(re.search(url_pattern, text, re.IGNORECASE))
+
 
 def format_date(d: date | datetime) -> str:
     """Format date as 'Monday, 15 March 2026'"""
@@ -24,31 +38,59 @@ def truncate_text(text: str, max_length: int = 100) -> str:
         return text
     return text[:max_length - 3] + "..."
 
-def format_preview_text(data: Dict) -> str:
-    """Format poster preview for user confirmation"""
-    is_anon = data.get("is_anonymous", False)
-    author = "🔒 Anonymous" if is_anon else f"👤 {data.get('first_name', 'User')}"
+def format_preview_text(data: dict) -> str:
+    """Format preview text for confirmation step"""
     
-    event_date = data.get("event_date")
-    if event_date:
+    language = data.get('language', 'ru')  # Get language from data or default to ru
+    
+    preview = f"{i18n.t('poster_flow.confirmation.title', language, default='✅ Проверьте перед публикацией')}\n\n"
+    
+    # Photo info
+    if data.get('photo_file_id'):
+        preview += "📸 <b>Фото:</b> Прикреплено\n"
+    
+    # Caption
+    caption = data.get('caption', 'Нет описания')
+    if len(caption) > 100:
+        caption = caption[:100] + '...'
+    preview += f"\n📝 <b>Описание:</b>\n<code>{caption}</code>\n"
+    
+    # Event date - ✅ Convert string to date object
+    event_date_str = data.get('event_date')
+    if event_date_str:
         try:
-            date_obj = datetime.fromisoformat(event_date).date()
-            date_formatted = format_date(date_obj)
-        except:
-            date_formatted = event_date
+            # Convert ISO string to date object
+            if isinstance(event_date_str, str):
+                date_formatted = datetime.fromisoformat(event_date_str).date()
+            else:
+                date_formatted = event_date_str
+            
+            # Now get_day_name will work
+            day_name = i18n.get_day_name(date_formatted, language)
+            date_display = date_formatted.strftime("%d.%m.%Y")
+            
+            preview += f"\n{i18n.t('poster_flow.date.date', language, default='📅 Дата')} {day_name} {date_display}\n"
+        except Exception as e:
+            preview += f"\n📅 <b>Дата:</b> {event_date_str}\n"
+    
+    # Anonymity
+    is_anonymous = data.get('is_anonymous', False)
+    if is_anonymous:
+        preview += f"\n{i18n.t('poster_flow.anonymous.anonymous', language, default='🔒 Анонимно')}\n"
     else:
-        date_formatted = "Not specified"
+        preview += f"\n{i18n.t('poster_flow.anonymous.show_name', language, default='👤 Показать имя')}\n"
+        if data.get('username'):
+            preview += f"@{data.get('username')}\n"
+        else:
+            preview += f"{data.get('first_name', 'Пользователь')}\n"
     
-    caption = truncate_text(data.get("caption", "No description"), 200)
+    # Forwarded info
+    if data.get('is_forwarded'):
+        preview += f"\n📬 <b>Переслано из:</b> {data.get('forward_source', 'Неизвестно')}\n"
+        if data.get('telegram_link'):
+            preview += f"🔗 {data.get('telegram_link')}\n"
     
-    return (
-        f"👁️ <b>Preview Your Poster</b>\n\n"
-        f"{author}\n"
-        f"📅 <b>Date:</b> {date_formatted}\n\n"
-        f"📝 <b>Description:</b>\n"
-        f"<code>{caption}</code>\n\n"
-        f"<i>Everything looks good? Confirm to submit for moderation!</i>"
-    )
+    return preview
 
 def format_moderation_caption(data: Dict, poster_id: int) -> str:
     """Format caption for moderation chat"""
@@ -75,53 +117,79 @@ def format_moderation_caption(data: Dict, poster_id: int) -> str:
         f"{data.get('caption', 'No description')}"
     )
 
-def format_public_caption(data: dict, user_info: Optional[dict] = None) -> str:
-    """Format final caption for public channel"""
-    is_anon = data.get("is_anonymous", False)
+
+def format_public_caption(data: dict, user_info: dict = None) -> str:
+    """
+    Format the final public caption for channel posts.
     
-    # Author line
-    if is_anon:
-        author_line = "🔒 <b>Anonymous submission</b>"
-    else:
-        # Non-anonymous: show user info
-        if user_info:
-            name = user_info.get("first_name", "User")
-            username = user_info.get("username")
-            if username:
-                author_line = f"👤 <b>Submitted by @{username}</b>"
-            else:
-                author_line = f"👤 <b>Submitted by {name}</b>"
-        else:
-            author_line = "👤 <b>Submitted by User</b>"
+    Args:
+        data: dict with caption, event_date, is_anonymous, etc.
+        user_info: dict with first_name, username (if not anonymous)
     
-    # Event date line
-    event_date = data.get("event_date")
+    Returns:
+        Formatted caption string with HTML tags
+    """
+    
+    # ✅ Initialize ALL variables upfront to avoid UnboundLocalError
+    author_line = ""
     date_line = ""
+    caption = data.get("caption", "").strip()
+    
+    # ============ AUTHOR LINE ============
+    if data.get("is_anonymous"):
+        author_line = ""  # Anonymous = no author line
+    elif user_info:
+        if user_info.get("username"):
+            author_line = f"👤 @{user_info['username']}\n"
+        elif user_info.get("first_name"):
+            author_line = f"👤 {user_info['first_name']}\n"
+        else:
+            author_line = "👤 Пользователь\n"
+    else:
+        # Fallback if user_info is None but not anonymous
+        author_line = ""
+    
+    # ============ DATE LINE ============
+    event_date = data.get("event_date")
     if event_date:
         try:
-            date_obj = datetime.fromisoformat(event_date).date()
-            date_formatted = format_date(date_obj)
-            date_line = f"\n📅 <b>Date:</b> {date_formatted}"
-        except:
-            pass
+            # Handle both string and datetime objects
+            if isinstance(event_date, str):
+                from datetime import datetime
+                event_date = datetime.fromisoformat(event_date)
+            
+            # Format: "📅 29 марта 2026"
+            month_names_ru = {
+                1: "января", 2: "февраля", 3: "марта", 4: "апреля",
+                5: "мая", 6: "июня", 7: "июля", 8: "августа",
+                9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+            }
+            
+            day = event_date.day
+            month = month_names_ru.get(event_date.month, "месяца")
+            year = event_date.year
+            
+            date_line = f"📅 {day} {month} {year}\n"
+        except Exception as e:
+            logger.warning(f"Could not format event date: {e}")
+            date_line = f"📅 {event_date}\n"
+    else:
+        date_line = ""
     
-    # Caption with hashtag
-    caption = data.get("caption", "No description")
-    if "#афиша" not in caption.lower():
-        caption += "\n\n#афиша"
+    # ============ BUILD FINAL CAPTION ============
     
-    return f"{author_line}{date_line}\n\n{caption}"
-
-
-def has_valid_link(text: str) -> bool:
-    """Check if text contains at least one valid URL/link"""
-    if not text:
-        return False
+    # Add source link if forwarded from Telegram
+    if data.get("telegram_link"):
+        caption += f"\n\n🔗 Источник: {data['telegram_link']}"
     
-    # Simple but effective: matches domain.tld with optional protocol/www/path
-    url_pattern = r'((?:https?://)?(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?|t\.me/[^\s]+|telegram\.me/[^\s]+)'
+    # Add attribution for forwarded posts
+    if data.get("is_forwarded") and data.get("forward_source"):
+        caption += f"\n<i>Переслано из: {data['forward_source']}</i>"
     
-    return bool(re.search(url_pattern, text, re.IGNORECASE))
+    # Combine all parts
+    result = f"{author_line}{date_line}\n{caption}"
+    
+    return result.strip()
 
 
 def validate_caption(caption: str) -> tuple[bool, str]:
@@ -141,3 +209,89 @@ def validate_caption(caption: str) -> tuple[bool, str]:
             "• t.me/myevent"
         )
     return True, ""
+
+
+def extract_forwarded_info(message: Message) -> dict:
+    """
+    Extract relevant info from a forwarded message.
+    
+    Returns dict with:
+    - caption: str (message text)
+    - photo_file_id: str or None
+    - source_name: str (channel/user name)
+    - source_username: str or None
+    - telegram_link: str or None (link to original Telegram post)
+    """
+    info = {
+        'caption': None,
+        'photo_file_id': None,
+        'source_name': None,
+        'source_username': None,
+        'telegram_link': None
+    }
+    
+    # Get forward source info based on origin type
+    if message.forward_origin:
+        origin = message.forward_origin
+        
+        if isinstance(origin, MessageOriginUser):
+            info['source_name'] = origin.sender_user.first_name
+            if origin.sender_user.username:
+                info['source_username'] = f"@{origin.sender_user.username}"
+            # ❌ No message link for user forwards (no message_id)
+            
+        elif isinstance(origin, MessageOriginChat):
+            info['source_name'] = origin.sender_chat.title
+            if origin.sender_chat.username:
+                info['source_username'] = f"@{origin.sender_chat.username}"
+                # ✅ Build Telegram link for chat/channel forwards
+                info['telegram_link'] = f"https://t.me/{origin.sender_chat.username}/{origin.message_id}"
+            elif origin.sender_chat.id:
+                # For channels without username (private)
+                chat_id = str(origin.sender_chat.id)
+                if chat_id.startswith('-100'):
+                    chat_id = chat_id[4:]  # Remove -100 prefix
+                info['telegram_link'] = f"https://t.me/c/{chat_id}/{origin.message_id}"
+            
+        elif isinstance(origin, MessageOriginHiddenUser):
+            info['source_name'] = origin.sender_user_name
+            info['source_username'] = None
+            # ❌ No message link for hidden user forwards
+            
+        elif isinstance(origin, MessageOriginChannel):
+            info['source_name'] = origin.chat.title if origin.chat else "Канал"
+            if origin.chat and origin.chat.username:
+                info['source_username'] = f"@{origin.chat.username}"
+                # ✅ Build Telegram link for channel forwards
+                info['telegram_link'] = f"https://t.me/{origin.chat.username}/{origin.message_id}"
+            elif origin.chat and origin.chat.id:
+                # For channels without username (private)
+                chat_id = str(origin.chat.id)
+                if chat_id.startswith('-100'):
+                    chat_id = chat_id[4:]  # Remove -100 prefix
+                info['telegram_link'] = f"https://t.me/c/{chat_id}/{origin.message_id}"
+    
+    # Get message content
+    text = message.text or message.caption or ""
+    
+    if text:
+        info['caption'] = text
+    
+    if message.photo:
+        info['photo_file_id'] = message.photo[-1].file_id
+        if not info['caption']:
+            info['caption'] = message.caption or ""
+    
+    elif message.video:
+        if message.video.thumbnails:
+            info['photo_file_id'] = message.video.thumbnails[-1].file_id
+        if not info['caption']:
+            info['caption'] = message.caption or ""
+    
+    elif message.document:
+        if message.document.thumbnails:
+            info['photo_file_id'] = message.document.thumbnails[-1].file_id
+        if not info['caption']:
+            info['caption'] = message.caption or ""
+    
+    return info

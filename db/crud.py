@@ -218,3 +218,21 @@ def get_active_users_count(session: Session, days: int = 30) -> int:
     return session.query(User).join(Poster).filter(
         Poster.created_at >= cutoff
     ).distinct().count()
+
+
+def update_moderation_message_info(
+    session: Session,
+    poster_id: int,
+    moderation_message_id: int,
+    moderation_chat_id: int
+) -> Optional[Poster]:
+    """Store moderation message ID for keyboard restoration"""
+    poster = session.query(Poster).filter(Poster.id == poster_id).first()
+    
+    if poster:
+        poster.moderation_message_id = moderation_message_id
+        poster.moderation_chat_id = moderation_chat_id
+        session.commit()
+        session.refresh(poster)
+    
+    return poster

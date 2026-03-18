@@ -53,6 +53,10 @@ class Poster(Base):
     decline_reason = Column(String, nullable=True)
     moderator_notes = Column(Text, nullable=True)  #  NEW FIELD
     
+    moderation_message_id = Column(Integer, nullable=True)  # ← NEW FIELD
+    moderation_chat_id = Column(Integer, nullable=True)     # ← NEW FIELD
+    
+
     # Published message reference
     channel_message_id = Column(Integer, nullable=True)
     channel_chat_id = Column(Integer, nullable=True, index=True)  # ← INDEX ADDED

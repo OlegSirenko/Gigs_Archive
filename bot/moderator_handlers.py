@@ -12,7 +12,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
-from sqlalchemy import and_
+from sqlalchemy import and_, func
+from sqlalchemy.orm import joinedload
 from db.crud import get_moderator_stats
 
 # ✅ ADD i18n IMPORT
@@ -796,17 +797,66 @@ async def final_cancel(callback: types.CallbackQuery, state: FSMContext):
 
 @moderation_router.message(Command("pending"), F.from_user.id.in_(config.admin_ids))
 async def cmd_pending(message: types.Message):
-    """Show pending posters count"""
+    """Show pending posters with moderation message IDs"""
     
-    language = i18n.get_user_language(message.from_user.language_code)  # ← ADDED
+    language = i18n.get_user_language(message.from_user.language_code)
     
     with get_session() as session:
-        count = get_pending_posters_count(session)
+        # ✅ Use joinedload to eagerly load user relationship
+        pending_posters = session.query(Poster).options(
+            joinedload(Poster.user)  # ← PRELOAD USER DATA
+        ).filter(
+            Poster.status == ModerationStatus.PENDING
+        ).order_by(Poster.created_at.asc()).limit(15).all()
+        
+        total_count = session.query(func.count(Poster.id)).filter(
+            Poster.status == ModerationStatus.PENDING
+        ).scalar() or 0
+    
+    if not pending_posters:
+        await message.answer(
+            "✅ <b>Нет афиш на модерации!</b>\n\n🎉 Все обработаны.",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Build message text
+    text = f"⏳ <b>Афиши на модерации:</b> <code>{total_count}</code>\n\n"
+    
+    if total_count > 15:
+        text += f"<i>Показано первых 15 из {total_count}:</i>\n\n"
+    
+    for i, poster in enumerate(pending_posters, 1):
+        # Extract short caption preview
+        caption_preview = poster.caption[:40] + "..." if len(poster.caption) > 40 else poster.caption
+        
+        # Get moderation message ID
+        mod_message_id = poster.moderation_message_id if poster.moderation_message_id else "Н/Д"
+        
+        # ✅ Get username (with fallback)
+        username = poster.user.username if poster.user and poster.user.username else f"ID {poster.user_id}"
+        
+        # Add to list
+        text += f"{i}. <b>ID</b> <code>{poster.id}</code> — {caption_preview}\n"
+        text += f"   👤 @{username} | 📅 {poster.event_date.strftime('%d.%m') if poster.event_date else 'Н/Д'}\n\n"
+        
+    
+    if total_count > 15:
+        text += f"<i>... и ещё {total_count - 15} в очереди</i>\n\n"
+    
+    # Add hint about how to find messages
+    text += "<i>💡 Как найти сообщение:</i>\n"
+    text += "<i>1. Откройте чат модерации</i>\n"
+    text += "<i>2. Введите ID афиши в поиск (или используйте @MessageInfoBot)</i>\n"
+    text += "<i>3. Или прокрутите до нужного сообщения</i>"
     
     await message.answer(
-        f"{t('moderation.pending.title', language)} {t('moderation.pending.count', language, count=count)}",
-        parse_mode="HTML"
+        text,
+        parse_mode="HTML",
+        disable_web_page_preview=True
     )
+    
+    logger.info(f"/pending command used by admin {message.from_user.username} — {total_count} pending")
 
 
 @moderation_router.message(Command("mystats"), F.from_user.id.in_(config.admin_ids))

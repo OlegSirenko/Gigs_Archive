@@ -466,9 +466,9 @@ async def process_date_selection(callback: types.CallbackQuery, state: FSMContex
         ),
         reply_markup=confirmation_keyboard(language).as_markup()
     )
-    
     await state.update_data(prev_bot_message_id=callback.message.message_id)
     await callback.answer()
+
 
 @poster_router.callback_query(PosterSubmission.waiting_for_date, F.data == "poster:back_to_anon")
 async def back_to_anonymous(callback: types.CallbackQuery, state: FSMContext):

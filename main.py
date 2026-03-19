@@ -6,13 +6,14 @@ Initialize database, connect routers, and start polling.
 
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from config import config
 from db.models import init_db
 from bot.handlers import commands_router, poster_router
 from bot.moderator_handlers import moderation_router, moderator_edit_router
+from bot.summary_handlers import summary_router 
 
 # Setup logging
 logging.basicConfig(
@@ -29,7 +30,54 @@ bot = Bot(
 dp = Dispatcher()
 
 # Include all routers
-dp.include_routers(commands_router, poster_router, moderation_router, moderator_edit_router)
+dp.include_routers(commands_router, summary_router, poster_router, moderation_router, moderator_edit_router)
+
+
+async def setup_bot_commands(bot: Bot):
+    """Set up bot commands for different scopes"""
+    
+    # Default commands for all users
+    default_commands = [
+        types.BotCommand(command="start", description="🚀 Запустить бота"),
+        types.BotCommand(command="help", description="📚 Список команд"),
+        types.BotCommand(command="poster", description="📸 Отправить афишу"),
+        types.BotCommand(command="stats", description="📊 Моя статистика"),
+        types.BotCommand(command="summary", description="🗓️ Еженедельная подборка"),
+        types.BotCommand(command="cancel", description="❌ Отменить действие"),
+    ]
+    
+    # Admin-only commands
+    admin_commands = default_commands + [
+        types.BotCommand(command="pending", description="⏳ Афиши на модерации (Модератор)"),
+        types.BotCommand(command="mystats", description="📊 Статистика модератора (Модератор)"),
+    ]
+    
+    try:
+        # 1. Set default commands for everyone (private chats + groups)
+        await bot.set_my_commands(
+            commands=default_commands,
+            scope=types.BotCommandScopeDefault()
+        )
+        
+        # 2. Set admin commands for each admin in their DM
+        for admin_id in config.admin_ids:
+            await bot.set_my_commands(
+                commands=admin_commands,
+                scope=types.BotCommandScopeChat(chat_id=admin_id)
+            )
+        
+        # 3. Set admin commands for moderation chat (if configured)
+        if config.moderation_chat_id:
+            await bot.set_my_commands(
+                commands=admin_commands,
+                scope=types.BotCommandScopeChat(chat_id=config.moderation_chat_id)
+            )
+        
+        logger.info("✅ Bot commands configured for all scopes")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to set bot commands: {e}")
+
 
 async def main():
     """Main entry point"""
@@ -50,15 +98,8 @@ async def main():
         logger.info(f"📢 Main Channel: {config.main_channel_id}")
         logger.info(f"🔍 Moderation Chat: {config.moderation_chat_id}")
     
+        await setup_bot_commands(bot=bot)
 
-        # Set commands menu
-        await bot.set_my_commands([
-            types.BotCommand(command="start", description="🚀 Start the bot"),
-            types.BotCommand(command="help", description="📚 Show all commands"),
-            types.BotCommand(command="poster", description="📸 Submit a poster"),
-            types.BotCommand(command="stats", description="📊 Your statistics"),
-            types.BotCommand(command="cancel", description="❌ Cancel operation"),
-        ])
         logger.info("✅ Bot commands menu set")
         
         # Start polling

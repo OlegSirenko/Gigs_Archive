@@ -1,0 +1,327 @@
+{
+  "commands": {
+    "menu": {
+      "start": "🚀 Start the bot",
+      "help": "📚 Commands list",
+      "poster": "📸 Submit poster",
+      "stats": "📊 My statistics",
+      "summary": "🗓️ Event summary",
+      "sub_on": "✅ Subscribe to digest",
+      "sub_off": "❌ Unsubscribe from digest",
+      "cancel": "❌ Cancel action",
+      "pending": "⏳ Pending moderation",
+      "mystats": "📊 Moderator statistics"
+    },
+    "start": {
+      "title": "👋 <b>Welcome to Gigs Archive Bot!</b>",
+      "description": "I help publish event posters",
+      "how_to": "📸 <b>How to submit a poster:</b>",
+      "steps": [
+        "Use the /poster command",
+        "Send a photo with event description",
+        "Choose: show your name or anonymous",
+        "Specify the event date",
+        "Confirm and submit!"
+      ],
+      "footer": "All submissions are moderated before being published in the channel.\n\nUse /help for the list of commands.",
+      "auto_subscribe_note": "✅ <i>You are automatically subscribed to the weekly Friday summary!</i>\n<i>To unsubscribe: /sub_off</i>"
+    },
+    "help": {
+      "title": "📚 <b>Available Commands</b>",
+      "general_title": "🔹 <b>General</b>",
+      "general_commands": "/start — Start the bot\n/help — Show this help\n",
+      "posters_title": "🔹 <b>Posters</b>",
+      "posters_commands": "/poster — Submit a new poster\n/stats — Your publication statistics\n/cancel — Cancel current action",
+      "subscription_title": "🔹 <b>Subscription</b>",
+      "subscription_commands": "/summary — Weekly event summary\n/sub_on — Subscribe to Friday digest\n/sub_off — Unsubscribe from digest",
+      "moderator_title": "🔹 <b>For Moderators</b>",
+      "moderator_commands": "/pending — Posters pending moderation\n/mystats — Moderator statistics",
+      "footer": "<i>All posters are moderated before publication.</i>"
+    },
+    "stats": {
+      "title": "📊 <b>Your Statistics</b>",
+      "total": "Total submitted",
+      "approved": "✅ Approved",
+      "declined": "❌ Declined",
+      "pending": "⏳ Pending"
+    },
+    "ping": {
+      "text": "🏓 <b>Bot is working!</b>\n\nLatency: {latency}ms"
+    }
+  },
+  "poster_flow": {
+    "confirmation": {
+      "title": "✅ <b>Review Before Publishing</b>",
+      "preview_hint": "👁️ <i>Review the poster before sending for moderation:</i>",
+      "publish": "✅ Publish",
+      "edit": "✏️ Edit",
+      "cancel": "❌ Cancel"
+    },
+    "preview": {
+      "photo_attached": "📸 <b>Photo:</b> Attached",
+      "description_label": "📝 <b>Description:</b>",
+      "no_description": "No description",
+      "date_label": "📅 Date:",
+      "anonymous_label": "🔒 Publish anonymously",
+      "show_name_label": "👤 Show my name",
+      "user_default": "User",
+      "forwarded_from": "📬 <b>Forwarded from:</b>",
+      "unknown_source": "Unknown"
+    },
+    "start": {
+      "title": "📸 <b>Send Your Poster</b>",
+      "description": "Attach a photo and add a link and description of the event in the caption.\n<b>Important:</b> Be sure to include at least one link to the event!",
+      "edit_hint": "✏️ You'll be able to edit everything before publication!",
+      "cancel_hint": "❌ Click «Cancel» at any time.",
+      "examples_title": "<i>Example links:</i>",
+      "examples": "• example.com\n• https://tickets.com\n• t.me/myevent"
+    },
+    "forwarded": {
+      "detected": "📬 <b>Forwarded Message</b>",
+      "source": "<i>Source:</i> {source}",
+      "no_content": "⚠️ The forwarded message must contain text or media.\nPlease send a photo with description or forward a message with a poster.",
+      "attribution": "<i>Source: {source}</i>"
+    },
+    "invalid_photo": {
+      "text": "⚠️ Please send a <b>photo</b> for your poster.\nYou can add the event description in the caption."
+    },
+    "validation_error": {
+      "no_link": "⚠️ Please add at least one link to the event.",
+      "examples_title": "<i>Examples:</i>",
+      "examples": "• example.com\n• https://tickets.com\n• t.me/myevent",
+      "retry_hint": "<i>Click the button below to try again.</i>"
+    },
+    "anonymous": {
+      "title": "🔐 <b>Privacy Settings</b>",
+      "description": "Will your name be shown with this poster?",
+      "show_name": "👤 Show my name",
+      "anonymous": "🔒 Publish anonymously",
+      "selected_anon": "🔒 Anonymous mode selected",
+      "selected_public": "👤 Public mode selected"
+    },
+    "date": {
+      "date": "📅 Date:",
+      "title": "📅 <b>When is the event?</b>",
+      "description": "<i>Select a date from the options below:</i>",
+      "back": "⬅️ Back"
+    },
+    "confirmation": {
+      "title": "✅ <b>Review Before Publishing</b>",
+      "preview_hint": "👁️ <i>Review the poster before sending for moderation:</i>",
+      "publish": "✅ Publish",
+      "edit": "✏️ Edit",
+      "cancel": "❌ Cancel"
+    },
+    "edit": {
+      "title": "✏️ <b>Edit Poster</b>",
+      "description": "Send a new photo to replace the current one.\nDescription and other settings will be saved.",
+      "previous_caption": "<i>Previous caption:</i>"
+    },
+    "success": {
+      "title": "✅ <b>Poster Submitted!</b>",
+      "description": "Your poster is now in the moderation queue.\nYou will be notified when it's reviewed."
+    },
+    "cancelled": {
+      "with_photo": "❌ Submission cancelled.\n\n👋 <b>Welcome to Gigs Archive!</b>\n\nI help publish event posters after moderation.\n\n📸 <b>How to submit a poster:</b>\n1. Use the /poster command\n2. Send a photo with event description\n3. Choose: show your name or anonymous\n4. Specify the event date\n5. Confirm and submit!\n\nAll submissions are moderated before being published in the channel.\n\nUse /help for the list of commands.",
+      "without_photo": "❌ Submission cancelled."
+    },
+    "retry": {
+      "button": "🔄 Try Again",
+      "title": "📸 <b>Send Your Poster</b>",
+      "description": "Attach a photo and add the event description.\n<b>Don't forget to add at least one link!</b>",
+      "examples_title": "<i>Examples:</i>",
+      "examples": "• example.com\n• https://tickets.com\n• t.me/myevent"
+    },
+    "start_over": {
+      "button": "🔄 Start Over"
+    }
+  },
+  "notifications": {
+    "approved": {
+      "debug": "🧪 <b>TEST MODE — Poster Approved!</b>\n\n{anon_text}\n⚠️ <i>This is a test channel. Not published in the main channel.</i>",
+      "production": "🎉 <b>Your poster is approved!</b>\n\n{anon_text}\nCheck the channel!",
+      "anon_yes": "It was published anonymously.",
+      "anon_no": "It was published with your name."
+    },
+    "declined": {
+      "title": "😔 <b>Your poster was declined</b>",
+      "reason": "<b>Reason:</b>",
+      "moderator": "<b>Moderator:</b>",
+      "hint": "<i>Use /poster to submit a corrected version.</i>"
+    },
+    "decline_reasons": {
+      "low_quality": "📷 Low quality image — please use a clearer, higher resolution photo.",
+      "missing_details": "📝 Missing event details — please add date, time and venue.",
+      "inappropriate": "🚫 Inappropriate content — please ensure the content follows community guidelines.",
+      "wrong_date": "📅 Wrong date or event already passed — please submit posters for upcoming events.",
+      "duplicate": "🔄 Duplicate submission — this event was already submitted before.",
+      "custom": "⚠️ Please contact moderation for details."
+    }
+  },
+  "moderation": {
+    "action": {
+      "decline_selected": "Select decline reason",
+      "decline_cancelled": "✅ Decline cancelled. Options restored",
+      "published_success": "✅ <b>Published successfully!</b>\n\nPoster #{poster_id} is now in the channel.",
+      "returned_to_queue": "⬅️ <b>Poster #{poster_id} returned to queue</b>\n👤 @{username} cancelled finalization\n<i>Moderation buttons restored above ↑</i>",
+      "cancel_returned": "{operation_cancelled}\n\nPoster #{poster_id} returned to moderation queue.",
+      "sent_to_dm": "✅ Sent to DM for finalization!",
+      "poster_declined": "❌ Poster declined!",
+      "test_mode_caption": "\n\n⚠️ <i>TEST MODE — not a real publication</i>",
+      "published_channel": "🔗 Published: {channel_link}",
+      "poster_published": "✅ <b>Poster #{poster_id} published!</b>"
+    },
+    "preview": {
+      "submission_title": "📨 <b>New Poster Submission</b>",
+      "poster_id": "🆔 Poster ID: <code>{poster_id}</code>",
+      "user_id": "👤 User: <code>{user_id}</code>",
+      "anonymous": "🔒 Anonymous: {anonymous}",
+      "event_date": "📅 Event Date: {date}",
+      "not_specified": "Not specified",
+      "original_caption": "📝 <b>Original Caption:</b>",
+      "no_description": "No description"
+    },
+    "edit_again": {
+      "title": "✏️ <b>Edit Final Description</b>",
+      "description": "Send the final text for this publication."
+    },
+    "no_posters_pending": "ℹ️ No posters awaiting finalization.\nFirst approve a poster in the moderation chat!",
+    "skip_preview": {
+      "title": "👁️ <b>Preview (original description)</b>",
+      "ready_hint": "<i>Ready to publish?</i>"
+    },
+    "edit_preview": {
+      "title": "👁️ <b>Preview before publishing</b>",
+      "check_hint": "<i>Check before publishing!</i>"
+    },
+    "userinfo": {
+      "title": "👤 <b>User Information</b>",
+      "id": "<b>ID:</b>",
+      "name": "<b>Name:</b>",
+      "username": "<b>Username:</b>",
+      "username_none": "<i>not specified</i>",
+      "language": "<b>Language:</b>",
+      "premium": "<b>Telegram Premium:</b>",
+      "premium_yes": "✅",
+      "stats_title": "📊 <b>Publication Statistics:</b>",
+      "stats_total": "Total submitted",
+      "stats_approved": "✅ Approved",
+      "stats_declined": "❌ Declined",
+      "stats_pending": "⏳ Pending",
+      "registered": "<i>Registered:</i>",
+      "write_button": "📨 Message User",
+      "close_button": "❌ Close"
+    },
+    "pending": {
+      "title": "⏳ <b>Posters Pending Moderation:</b>",
+      "count": "<code>{count}</code>",
+      "no_posters": "✅ <b>No posters pending moderation!</b>\n\n🎉 All processed.",
+      "showing_first": "Showing first {count} of {total}:",
+      "not_available": "N/A",
+      "user_id_format": "ID {user_id}",
+      "id": "ID",
+      "na": "N/A",
+      "more_in_queue": "... and {count} more in queue",
+      "how_to_find_title": "How to find a message:",
+      "how_to_find_step1": "Open the moderation chat",
+      "how_to_find_step2": "Search for the poster ID (or use @MessageInfoBot)",
+      "how_to_find_step3": "Or scroll to the message"
+    },
+    "moderator_stats": {
+      "title": "📊 <b>Your Moderation Statistics</b>",
+      "total": "Total reviewed",
+      "approved": "✅ Approved",
+      "declined": "❌ Declined",
+      "pending_final": "⏳ Awaiting finalization"
+    },
+    "moderation_finalize": {
+      "title": "✏️ <b>Create Final Description</b>\n\n",
+      "id": "Poster ID: <code>{id}</code>",
+      "userlink": "User link: <code>{userlink}</code>",
+      "description": "Send the final description for this publication.\nInclude in the description:\n • Event details\n • Date/time\n • Venue\n • Ticket links\n • Hashtags\n\n",
+      "footer": "Or click «Skip» to use the original description."
+    },
+    "status": {
+      "pending_final": "⏳ <b>AWAITING FINALIZATION</b>",
+      "pending_final_hint": "<i>Moderator is working on the description...</i>",
+      "approved": "✅ <b>APPROVED</b>",
+      "declined": "❌ <b>DECLINED</b>"
+    }
+  },
+  "subscription": {
+    "sub_on": {
+      "title": "✅ <b>You are subscribed to the weekly summary!</b>",
+      "description": "📅 Every Friday at 14:30 I'll send you a selection of weekend events.",
+      "unsubscribe_hint": "<i>To unsubscribe: /sub_off</i>"
+    },
+    "sub_off": {
+      "title": "❌ <b>You have unsubscribed from the weekly summary.</b>",
+      "resubscribe_hint": "<i>To subscribe again: /sub_on</i>"
+    },
+    "friday_message": {
+      "title": "🎉 <b>Friday! Time to plan your weekend</b>",
+      "no_events": "We haven't found anything for this weekend yet( But we're still looking!",
+      "found_events": "Found <b>{count} events</b> for the coming days:",
+      "footer": "<i>This is an automatic selection from Gigs Archive</i>\n<i>To unsubscribe: /sub_off</i>",
+      "hint": "<i>Want to be the first to know about new events? Submit posters via /poster</i>"
+    }
+  },
+  "common": {
+    "no_active_operation": "✅ No active operation to cancel.",
+    "operation_cancelled": "❌ Operation cancelled.",
+    "error": "⚠️ An error occurred. Please try again.",
+    "not_authorized": "❌ You are not authorized for this action.",
+    "not_found": "⚠️ Not found.",
+    "close": "❌ Close",
+    "back": "⬅️ Back",
+    "cancel": "❌ Cancel",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "weekly_summary": {
+    "title": "📊 <b>Weekly Event Summary</b>",
+    "period": "📅 Period: {start_date} — {end_date}",
+    "total": "✅ Total events: {count}",
+    "no_events": "📭 No events were approved this week.",
+    "footer": "Summary created by <a href=\"https://t.me/Gigs_archive_bot\">Gigs Archive</a> bot",
+    "by_date": "🗓️ {date} ({count} events)",
+    "empty_day": "<i>Nothing for this day(</i>",
+    "empty_weekdays": "<i>Nothing for these days(</i>",
+    "no_description": "No description"
+  },
+  "keyboards": {
+    "moderation": {
+      "approve": "✅ Approve",
+      "decline": "❌ Decline",
+      "view_user": "👤 View User"
+    },
+    "decline_reasons": {
+      "low_quality": "📷 Low quality",
+      "missing_details": "📝 No details",
+      "inappropriate": "🚫 Inappropriate content",
+      "wrong_date": "📅 Wrong date",
+      "duplicate": "🔄 Duplicate",
+      "custom": "⚠️ Other"
+    },
+    "moderator": {
+      "skip": "⏭️ Skip — use original",
+      "publish": "✅ Publish to channel",
+      "edit_again": "✏️ Edit again"
+    },
+    "anonymous_choice": {
+      "show_name": "👤 Show my name",
+      "anonymous": "🔒 Publish anonymously"
+    },
+    "date_choice": {
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "select_custom": "📅 Select date",
+      "back": "⬅️ Back"
+    },
+    "confirmation": {
+      "publish": "✅ Publish",
+      "edit": "✏️ Edit",
+      "cancel": "❌ Cancel"
+    }
+  }
+}

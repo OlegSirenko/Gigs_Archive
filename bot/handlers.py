@@ -243,42 +243,42 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
     if message.forward_origin:
         # Extract info from forwarded message
         forwarded_data = extract_forwarded_info(message)
-        
+
         # Validate: forwarded message must have text or media
         if not forwarded_data.get('caption') and not forwarded_data.get('photo_file_id'):
             await message.answer(
-                "⚠️ Пересланное сообщение должно содержать текст или медиа.\n"
-                "Пожалуйста, отправьте фото с описанием или перешлите сообщение с афишей.",
+                t('poster_flow.forwarded.no_content', language),
                 parse_mode="HTML"
             )
             await state.clear()
             return
-        
+
         # Use forwarded data as poster data
         caption = forwarded_data.get('caption', '')
         photo_file_id = forwarded_data.get('photo_file_id')
         telegram_link = forwarded_data.get('telegram_link')  # ← NEW
-        
+
         # Add attribution note WITH link
-        if forwarded_data.get('source_name'):
+        if forwarded_data.get('is_channel_forward') and forwarded_data.get('source_name'):
             if telegram_link:
-                caption = f"{caption}\n\n<i>Источник: {forwarded_data['source_name']} — {telegram_link}</i>"
+                attribution_source = f"{forwarded_data['source_name']} — {telegram_link}"
+                caption = f"{caption}\n\n{t('poster_flow.forwarded.attribution', language, source=attribution_source)}"
             else:
-                caption = f"{caption}\n\n<i>Источник: {forwarded_data['source_name']}</i>"
-        
+                caption = f"{caption}\n\n{t('poster_flow.forwarded.attribution', language, source=forwarded_data['source_name'])}"
+
         # ✅ For forwarded messages with Telegram link, skip link validation
         # The Telegram link IS the event link!
         is_valid = True
         error_message = ""
-        
+
         # But if no Telegram link (private channel), require link in caption
         if not telegram_link:
             is_valid, error_message = validate_caption(caption)
-        
+
         if not is_valid:
             await handle_validation_error(message, state, error_message, language)
             return
-        
+
         # Proceed with flow using forwarded data
         await state.update_data(
             photo_file_id=photo_file_id,
@@ -288,26 +288,28 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
             first_name=message.from_user.first_name,
             is_forwarded=True,
             forward_source=forwarded_data.get('source_name'),
-            telegram_link=telegram_link  # ← Store for moderation
+            telegram_link=telegram_link,  # ← Store for moderation
+            language=language  # ← Store language for preview formatting
         )
         
     # ============ HANDLE PHOTO ============
     elif message.photo:
         caption = message.caption or ""
-        
+
         is_valid, error_message = validate_caption(caption)
-        
+
         if not is_valid:
             await handle_validation_error(message, state, error_message, language)
             return
-        
+
         await state.update_data(
             photo_file_id=message.photo[-1].file_id,
             caption=caption,
             user_id=message.from_user.id,
             username=message.from_user.username,
             first_name=message.from_user.first_name,
-            is_forwarded=False
+            is_forwarded=False,
+            language=language  # ← Store language for preview formatting
         )
     
     # ============ INVALID INPUT ============
@@ -520,7 +522,7 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
             from bot.keyboards import moderation_keyboard
             from utils.helpers import format_moderation_caption
             from db.crud import update_moderation_message_info
-            
+
             mod_data = {
                 "caption": data.get('caption', ''),
                 "user_id": data['user_id'],
@@ -528,8 +530,8 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
                 "is_anonymous": data['is_anonymous'],
                 "event_date": data.get('event_date')
             }
-            
-            mod_caption = format_moderation_caption(mod_data, poster.id)
+
+            mod_caption = format_moderation_caption(mod_data, poster.id, language)
             
             keyboard = moderation_keyboard(
                 user_id=data['user_id'],

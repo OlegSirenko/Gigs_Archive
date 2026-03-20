@@ -52,12 +52,14 @@ def create_poster(
     photo_file_id: str,
     caption: str,
     event_date: datetime,
-    is_anonymous: bool
+    is_anonymous: bool,
+    photos_json: str = None
 ) -> Poster:
     """Create new poster submission"""
     poster = Poster(
         user_id=user_id,
         photo_file_id=photo_file_id,
+        photos_json=photos_json,  # ← NEW: Store media group photos
         caption=caption,
         event_date=event_date,
         is_anonymous=is_anonymous,

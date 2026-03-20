@@ -1,6 +1,7 @@
 # utils/helpers.py
 """Helper functions for formatting and text processing"""
 import re
+import json
 from aiogram.types import Message, MessageOriginUser, MessageOriginChat, MessageOriginHiddenUser, MessageOriginChannel
 from datetime import datetime, date
 from typing import Optional, Dict
@@ -47,7 +48,18 @@ def format_preview_text(data: dict) -> str:
 
     # Photo info
     if data.get('photo_file_id'):
-        preview += f"{t('poster_flow.preview.photo_attached', language)}\n"
+        is_media_group = data.get('is_media_group', False)
+        photos_json = data.get('photos_json')
+        
+        if is_media_group and photos_json:
+            try:
+                photos_list = json.loads(photos_json)
+                photo_count = len(photos_list)
+                preview += f"{t('poster_flow.preview.photo_attached', language)} ({t('poster_flow.preview.photos_count', language, count=photo_count)})\n"
+            except:
+                preview += f"{t('poster_flow.preview.photo_attached', language)}\n"
+        else:
+            preview += f"{t('poster_flow.preview.photo_attached', language)}\n"
 
     # Caption
     caption = data.get('caption', '')

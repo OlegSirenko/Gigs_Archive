@@ -38,12 +38,13 @@ class User(Base):
 
 class Poster(Base):
     __tablename__ = "posters"
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.telegram_id"), nullable=False, index=True)
-    
+
     # Content
     photo_file_id = Column(String, nullable=False)
+    photos_json = Column(Text, nullable=True)  # ← NEW: JSON array for media groups
     caption = Column(Text, nullable=True)
     event_date = Column(DateTime, nullable=True, index=True)  #  INDEX ADDED
     is_anonymous = Column(Boolean, default=False, index=True)  #  INDEX ADDED

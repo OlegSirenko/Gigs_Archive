@@ -53,7 +53,7 @@ class i18n:
     def t(cls, key: str, language: str = None, **kwargs) -> str:
         """
         Get translation by key with optional formatting.
-        
+
         Usage:
             i18n.t("commands.start.title")
             i18n.t("notifications.approved.production", anon_text="...")
@@ -61,13 +61,13 @@ class i18n:
         """
         if language is None:
             language = cls._default_language
-        
+
         translations = cls.load(language)
-        
+
         # Navigate nested keys (e.g., "commands.start.title")
         parts = key.split(".")
         value = translations
-        
+
         for part in parts:
             if isinstance(value, dict) and part in value:
                 value = value[part]
@@ -76,7 +76,27 @@ class i18n:
                 if language != cls._default_language:
                     return cls.t(key, cls._default_language, **kwargs)
                 return f"[[MISSING: {key}]]"
-        
+
+        # Handle pluralization format: "{count}|singular|plural|..."
+        if isinstance(value, str) and "|" in value and kwargs.get('count') is not None:
+            try:
+                count = int(kwargs.get('count', 1))
+                parts = value.split("|")
+                # Remove {count} prefix from first part
+                format_string = parts[0].replace("{count}", "").strip()
+                
+                if count == 1:
+                    # Singular form (first after format string)
+                    result = parts[1] if len(parts) > 1 else parts[0]
+                else:
+                    # Plural form (use last available or second part)
+                    result = parts[-1] if len(parts) > 2 else (parts[1] if len(parts) > 1 else parts[0])
+                
+                return result.format(count=count, **kwargs)
+            except Exception as e:
+                logger.warning(f"Error formatting pluralization for {key}: {e}")
+                return value
+
         # Format with kwargs if value is a string
         if isinstance(value, str) and kwargs:
             try:
@@ -84,7 +104,7 @@ class i18n:
             except KeyError as e:
                 logger.warning(f"Missing format key {e} in translation {key}")
                 return value
-        
+
         return value
     
     @classmethod

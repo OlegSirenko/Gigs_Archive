@@ -40,21 +40,23 @@ def truncate_text(text: str, max_length: int = 100) -> str:
 
 def format_preview_text(data: dict) -> str:
     """Format preview text for confirmation step"""
-    
+
     language = data.get('language', 'ru')  # Get language from data or default to ru
-    
-    preview = f"{i18n.t('poster_flow.confirmation.title', language, default='✅ Проверьте перед публикацией')}\n\n"
-    
+
+    preview = f"{t('poster_flow.confirmation.title', language)}\n\n"
+
     # Photo info
     if data.get('photo_file_id'):
-        preview += "📸 <b>Фото:</b> Прикреплено\n"
-    
+        preview += f"{t('poster_flow.preview.photo_attached', language)}\n"
+
     # Caption
-    caption = data.get('caption', 'Нет описания')
+    caption = data.get('caption', '')
+    if not caption:
+        caption = t('poster_flow.preview.no_description', language)
     if len(caption) > 100:
         caption = caption[:100] + '...'
-    preview += f"\n📝 <b>Описание:</b>\n<code>{caption}</code>\n"
-    
+    preview += f"\n{t('poster_flow.preview.description_label', language)}\n<code>{caption}</code>\n"
+
     # Event date - ✅ Convert string to date object
     event_date_str = data.get('event_date')
     if event_date_str:
@@ -64,39 +66,39 @@ def format_preview_text(data: dict) -> str:
                 date_formatted = datetime.fromisoformat(event_date_str).date()
             else:
                 date_formatted = event_date_str
-            
+
             # Now get_day_name will work
             day_name = i18n.get_day_name(date_formatted, language)
             date_display = date_formatted.strftime("%d.%m.%Y")
-            
-            preview += f"\n{i18n.t('poster_flow.date.date', language, default='📅 Дата')} {day_name} {date_display}\n"
+
+            preview += f"\n{t('poster_flow.date.date', language)} {day_name} {date_display}\n"
         except Exception as e:
-            preview += f"\n📅 <b>Дата:</b> {event_date_str}\n"
-    
+            preview += f"\n{t('poster_flow.date.date', language)} {event_date_str}\n"
+
     # Anonymity
     is_anonymous = data.get('is_anonymous', False)
     if is_anonymous:
-        preview += f"\n{i18n.t('poster_flow.anonymous.anonymous', language, default='🔒 Анонимно')}\n"
+        preview += f"\n{t('poster_flow.preview.anonymous_label', language)}\n"
     else:
-        preview += f"\n{i18n.t('poster_flow.anonymous.show_name', language, default='👤 Показать имя')}\n"
+        preview += f"\n{t('poster_flow.preview.show_name_label', language)}\n"
         if data.get('username'):
             preview += f"@{data.get('username')}\n"
         else:
-            preview += f"{data.get('first_name', 'Пользователь')}\n"
-    
+            preview += f"{data.get('first_name', t('poster_flow.preview.user_default', language))}\n"
+
     # Forwarded info
     if data.get('is_forwarded'):
-        preview += f"\n📬 <b>Переслано из:</b> {data.get('forward_source', 'Неизвестно')}\n"
+        preview += f"\n{t('poster_flow.preview.forwarded_from', language)} {data.get('forward_source', t('poster_flow.preview.unknown_source', language))}\n"
         if data.get('telegram_link'):
             preview += f"🔗 {data.get('telegram_link')}\n"
-    
+
     return preview
 
-def format_moderation_caption(data: Dict, poster_id: int) -> str:
+def format_moderation_caption(data: Dict, poster_id: int, language: str = "ru") -> str:
     """Format caption for moderation chat"""
     is_anon = data.get("is_anonymous", False)
     username = data.get("username", "no_username")
-    
+
     event_date = data.get("event_date")
     if event_date:
         try:
@@ -105,50 +107,51 @@ def format_moderation_caption(data: Dict, poster_id: int) -> str:
         except:
             date_formatted = event_date
     else:
-        date_formatted = "Not specified"
-    
+        date_formatted = t("moderation.preview.not_specified", language)
+
     return (
-        f"📨 <b>New Poster Submission</b>\n\n"
-        f"🆔 Poster ID: <code>{poster_id}</code>\n"
-        f"👤 User: <code>{data.get('user_id')}</code> (@{username})\n"
-        f"🔒 Anonymous: {'Yes' if is_anon else 'No'}\n"
-        f"📅 Event Date: {date_formatted}\n\n"
-        f"📝 <b>Original Caption:</b>\n"
-        f"{data.get('caption', 'No description')}"
+        f"{t('moderation.preview.submission_title', language)}\n\n"
+        f"{t('moderation.preview.poster_id', language, poster_id=poster_id)}\n"
+        f"{t('moderation.preview.user_id', language, user_id=data.get('user_id'))} (@{username})\n"
+        f"{t('moderation.preview.anonymous', language, anonymous=t('common.yes' if is_anon else 'common.no', language))}\n"
+        f"{t('moderation.preview.event_date', language, date=date_formatted)}\n\n"
+        f"{t('moderation.preview.original_caption', language)}\n"
+        f"{data.get('caption', t('moderation.preview.no_description', language))}"
     )
 
 
-def format_public_caption(data: dict, user_info: dict = None) -> str:
+def format_public_caption(data: dict, user_info: dict | None = None, language: str = "ru") -> str:
     """
     Format the final public caption for channel posts.
-    
+
     Args:
         data: dict with caption, event_date, is_anonymous, etc.
         user_info: dict with first_name, username (if not anonymous)
-    
+        language: language code for localization
+
     Returns:
         Formatted caption string with HTML tags
     """
-    
+
     # ✅ Initialize ALL variables upfront to avoid UnboundLocalError
     author_line = ""
     date_line = ""
     caption = data.get("caption", "").strip()
-    
+
     # ============ AUTHOR LINE ============
     if data.get("is_anonymous"):
         author_line = ""  # Anonymous = no author line
     elif user_info:
         if user_info.get("username"):
-            author_line = f"👤 @{user_info['username']}\n"
+            author_line = f"👤 {user_info['username']}\n"
         elif user_info.get("first_name"):
             author_line = f"👤 {user_info['first_name']}\n"
         else:
-            author_line = "👤 Пользователь\n"
+            author_line = f"👤 {t('poster_flow.preview.user_default', language)}\n"
     else:
         # Fallback if user_info is None but not anonymous
         author_line = ""
-    
+
     # ============ DATE LINE ============
     event_date = data.get("event_date")
     if event_date:
@@ -157,38 +160,50 @@ def format_public_caption(data: dict, user_info: dict = None) -> str:
             if isinstance(event_date, str):
                 from datetime import datetime
                 event_date = datetime.fromisoformat(event_date)
-            
-            # Format: "📅 29 марта 2026"
-            month_names_ru = {
-                1: "января", 2: "февраля", 3: "марта", 4: "апреля",
-                5: "мая", 6: "июня", 7: "июля", 8: "августа",
-                9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+
+            # Format: "📅 29 марта 2026" with localized month names
+            month_names = {
+                "ru": {
+                    1: "января", 2: "февраля", 3: "марта", 4: "апреля",
+                    5: "мая", 6: "июня", 7: "июля", 8: "августа",
+                    9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+                },
+                "en": {
+                    1: "January", 2: "February", 3: "March", 4: "April",
+                    5: "May", 6: "June", 7: "July", 8: "August",
+                    9: "September", 10: "October", 11: "November", 12: "December"
+                }
             }
-            
+
             day = event_date.day
-            month = month_names_ru.get(event_date.month, "месяца")
+            month_ru = month_names.get("ru", {}).get(event_date.month, "месяца")
+            month_en = month_names.get("en", {}).get(event_date.month, "Month")
             year = event_date.year
-            
-            date_line = f"📅 {day} {month} {year}\n"
+
+            # Use English month name if language is English, otherwise Russian
+            if language == "en":
+                date_line = f"📅 {month_en} {day}, {year}\n"
+            else:
+                date_line = f"📅 {day} {month_ru} {year}\n"
         except Exception as e:
             logger.warning(f"Could not format event date: {e}")
             date_line = f"📅 {event_date}\n"
     else:
         date_line = ""
-    
+
     # ============ BUILD FINAL CAPTION ============
-    
+
     # Add source link if forwarded from Telegram
     if data.get("telegram_link"):
         caption += f"\n\n🔗 Источник: {data['telegram_link']}"
-    
+
     # Add attribution for forwarded posts
     if data.get("is_forwarded") and data.get("forward_source"):
-        caption += f"\n<i>Переслано из: {data['forward_source']}</i>"
-    
+        caption += f"\n<i>{t('poster_flow.forwarded.attribution', language, source=data['forward_source'])}</i>"
+
     # Combine all parts
     result = f"{author_line}{date_line}\n{caption}"
-    
+
     return result.strip()
 
 
@@ -216,21 +231,22 @@ def extract_forwarded_info(message: Message) -> dict:
     Extract relevant info from a forwarded message.
     
     Returns dict with:
-    - caption: str (message text)
+    - caption: str
     - photo_file_id: str or None
     - source_name: str (channel/user name)
     - source_username: str or None
-    - telegram_link: str or None (link to original Telegram post)
+    - telegram_link: str or None
+    - is_channel_forward: bool ← NEW: True if from channel/group
     """
     info = {
         'caption': None,
         'photo_file_id': None,
         'source_name': None,
         'source_username': None,
-        'telegram_link': None
+        'telegram_link': None,
+        'is_channel_forward': False 
     }
     
-    # Get forward source info based on origin type
     if message.forward_origin:
         origin = message.forward_origin
         
@@ -238,38 +254,39 @@ def extract_forwarded_info(message: Message) -> dict:
             info['source_name'] = origin.sender_user.first_name
             if origin.sender_user.username:
                 info['source_username'] = f"@{origin.sender_user.username}"
-            # ❌ No message link for user forwards (no message_id)
+            # ❌ Not a channel forward
+            info['is_channel_forward'] = False
             
         elif isinstance(origin, MessageOriginChat):
             info['source_name'] = origin.sender_chat.title
             if origin.sender_chat.username:
                 info['source_username'] = f"@{origin.sender_chat.username}"
-                # ✅ Build Telegram link for chat/channel forwards
                 info['telegram_link'] = f"https://t.me/{origin.sender_chat.username}/{origin.message_id}"
             elif origin.sender_chat.id:
-                # For channels without username (private)
                 chat_id = str(origin.sender_chat.id)
                 if chat_id.startswith('-100'):
-                    chat_id = chat_id[4:]  # Remove -100 prefix
+                    chat_id = chat_id[4:]
                 info['telegram_link'] = f"https://t.me/c/{chat_id}/{origin.message_id}"
+            # ✅ Channel/group forward
+            info['is_channel_forward'] = True
             
         elif isinstance(origin, MessageOriginHiddenUser):
             info['source_name'] = origin.sender_user_name
             info['source_username'] = None
-            # ❌ No message link for hidden user forwards
+            info['is_channel_forward'] = False
             
         elif isinstance(origin, MessageOriginChannel):
             info['source_name'] = origin.chat.title if origin.chat else "Канал"
             if origin.chat and origin.chat.username:
                 info['source_username'] = f"@{origin.chat.username}"
-                # ✅ Build Telegram link for channel forwards
                 info['telegram_link'] = f"https://t.me/{origin.chat.username}/{origin.message_id}"
             elif origin.chat and origin.chat.id:
-                # For channels without username (private)
                 chat_id = str(origin.chat.id)
                 if chat_id.startswith('-100'):
-                    chat_id = chat_id[4:]  # Remove -100 prefix
+                    chat_id = chat_id[4:]
                 info['telegram_link'] = f"https://t.me/c/{chat_id}/{origin.message_id}"
+            # ✅ Channel forward
+            info['is_channel_forward'] = True
     
     # Get message content
     text = message.text or message.caption or ""
@@ -287,7 +304,7 @@ def extract_forwarded_info(message: Message) -> dict:
             info['photo_file_id'] = message.video.thumbnails[-1].file_id
         if not info['caption']:
             info['caption'] = message.caption or ""
-    
+
     elif message.document:
         if message.document.thumbnails:
             info['photo_file_id'] = message.document.thumbnails[-1].file_id
@@ -295,3 +312,33 @@ def extract_forwarded_info(message: Message) -> dict:
             info['caption'] = message.caption or ""
     
     return info
+
+
+def format_channel_post_link(poster) -> str | None:
+    """
+    Build Telegram link to published channel post.
+    
+    Args:
+        poster: Poster object with channel_message_id and channel_chat_id
+    
+    Returns:
+        str: Link like 'https://t.me/channelname/123' or None if not published
+    """
+    if not poster.channel_message_id or not poster.channel_chat_id:
+        return None
+    
+    chat_id = str(poster.channel_chat_id)
+    message_id = poster.channel_message_id
+    
+    # Format link based on chat type
+    if chat_id.startswith('-100'):
+        # Supergroup/channel
+        chat_id_clean = chat_id[4:]
+        return f"https://t.me/c/{chat_id_clean}/{message_id}"
+    elif chat_id.startswith('-'):
+        # Private group (may not work, but try)
+        chat_id_clean = chat_id[1:]
+        return f"https://t.me/c/{chat_id_clean}/{message_id}"
+    else:
+        # Public username
+        return f"https://t.me/{chat_id}/{message_id}"

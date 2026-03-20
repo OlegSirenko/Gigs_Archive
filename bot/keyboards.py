@@ -175,20 +175,20 @@ def moderator_skip_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     return builder
 
 
-def moderator_confirmation_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
+def moderator_confirmation_keyboard(poster_id: int, language: str = "ru") -> InlineKeyboardBuilder:
     """Keyboard for moderator final confirmation in DM"""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
             text=t("keyboards.moderator.publish", language),
-            callback_data="moderator:final_confirm"
+            callback_data=f"moderator:confirm:{poster_id}"
         ),
         InlineKeyboardButton(
             text=t("keyboards.moderator.edit_again", language),
-            callback_data="moderator:edit_again"
+            callback_data=f"moderator:edit:{poster_id}"
         )
     )
     builder.row(
-        InlineKeyboardButton(text=t("common.cancel", language), callback_data="moderator:final_cancel")
+        InlineKeyboardButton(text=t("common.cancel", language), callback_data=f"moderator:cancel:{poster_id}")
     )
     return builder

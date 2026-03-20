@@ -20,7 +20,7 @@ class User(Base):
     
     id = Column(Integer, primary_key=True)
     telegram_id = Column(Integer, unique=True, nullable=False, index=True)
-    username = Column(String, nullable=True, index=True)  # ← INDEX ADDED
+    username = Column(String, nullable=True, index=True)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=True)
     language_code = Column(String, nullable=True)
@@ -29,6 +29,8 @@ class User(Base):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
+    subscribe_weekly = Column(Boolean, default=False)  # User wants Friday summary
+
     posters = relationship("Poster", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):

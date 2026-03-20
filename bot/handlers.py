@@ -6,10 +6,12 @@ NO moderation logic here!
 import asyncio
 import re
 import logging
+import json
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.exceptions import TelegramAPIError
+from aiogram.types import InputMediaPhoto
 from bot.states import PosterSubmission
 from bot.keyboards import (
     cancel_keyboard,
@@ -28,11 +30,166 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+# ============ GLOBAL: Media groups tracking ============
+# Store pending media groups: {media_group_id: {'photos': [...], 'timer_task': asyncio.Task}}
+pending_media_groups: dict[str, dict] = {}
+MEDIA_GROUP_TIMEOUT = 1.5  # seconds to wait for all photos
+
 # ============ ROUTERS ============
 commands_router = Router(name="commands")    # /start, /poster, /stats, /cancel
 poster_router = Router(name="poster")        # Poster submission FSM flow
 
 # ============ HELPER FUNCTIONS ============
+
+async def process_media_group_complete(message: types.Message, state: FSMContext, photos: list, language: str, forwarded_data: dict = None):
+    """
+    Process completed media group (all photos received).
+    This is called after timeout when we assume all photos are collected.
+    """
+    try:
+        # Get caption from first photo or forwarded data
+        if forwarded_data:
+            caption = forwarded_data.get('caption', '')
+            telegram_link = forwarded_data.get('telegram_link')
+            
+            # Add attribution for forwarded channels
+            if forwarded_data.get('is_channel_forward') and forwarded_data.get('source_name'):
+                if telegram_link:
+                    attribution_source = f"{forwarded_data['source_name']} — {telegram_link}"
+                    caption = f"{caption}\n\n{t('poster_flow.forwarded.attribution', language, source=attribution_source)}"
+                else:
+                    caption = f"{caption}\n\n{t('poster_flow.forwarded.attribution', language, source=forwarded_data['source_name'])}"
+            
+            # Validate caption if no Telegram link
+            is_valid = True
+            error_message = ""
+            if not telegram_link:
+                is_valid, error_message = validate_caption(caption)
+            
+            if not is_valid:
+                await handle_validation_error(message, state, error_message, language)
+                return
+            
+            # Store forwarded data
+            await state.update_data(
+                photos_json=json.dumps(photos),
+                photo_file_id=photos[0]['file_id'],
+                caption=caption,
+                user_id=message.from_user.id,
+                username=message.from_user.username,
+                first_name=message.from_user.first_name,
+                is_forwarded=True,
+                is_media_group=True,
+                forward_source=forwarded_data.get('source_name'),
+                telegram_link=telegram_link,
+                language=language
+            )
+        else:
+            # Direct photo upload (not forwarded)
+            caption = photos[0].get('caption', '')
+            
+            is_valid, error_message = validate_caption(caption)
+            
+            if not is_valid:
+                await handle_validation_error(message, state, error_message, language)
+                return
+            
+            await state.update_data(
+                photos_json=json.dumps(photos),
+                photo_file_id=photos[0]['file_id'],
+                caption=caption,
+                user_id=message.from_user.id,
+                username=message.from_user.username,
+                first_name=message.from_user.first_name,
+                is_forwarded=False,
+                is_media_group=True,
+                language=language
+            )
+        
+        # Proceed to next step
+        await state.set_state(PosterSubmission.waiting_for_anonymous)
+        
+        sent = await message.answer(
+            f"{t('poster_flow.anonymous.title', language)}\n\n"
+            f"{t('poster_flow.anonymous.description', language)}",
+            parse_mode="HTML",
+            reply_markup=anonymous_choice_keyboard(language).as_markup()
+        )
+        
+        await state.update_data(
+            first_message_id=sent.message_id,
+            prev_bot_message_id=sent.message_id
+        )
+        
+        logger.info(f"Media group processed: {len(photos)} photos from user {message.from_user.id}")
+        
+    except Exception as e:
+        logger.error(f"Error processing media group: {e}")
+        await message.answer(t('common.error', language))
+
+
+async def handle_media_group_message(message: types.Message, state: FSMContext, forwarded_data: dict = None):
+    """
+    Handle individual message that is part of a media group.
+    Collects photos and processes them after timeout.
+    """
+    media_group_id = message.media_group_id
+
+    if not media_group_id:
+        return False  # Not a media group
+
+    language = i18n.get_user_language(message.from_user.language_code)
+
+    # Initialize group if first photo
+    if media_group_id not in pending_media_groups:
+        pending_media_groups[media_group_id] = {
+            'photos': [],
+            'timer_task': None,
+            'message': message,
+            'state': state,
+            'language': language,
+            'forwarded_data': forwarded_data
+        }
+
+    group = pending_media_groups[media_group_id]
+
+    # Extract photo file_id
+    if message.photo:
+        photo_info = {
+            'file_id': message.photo[-1].file_id,
+            'caption': message.caption or ''
+        }
+        group['photos'].append(photo_info)
+
+    # Cancel existing timer
+    if group['timer_task'] and not group['timer_task'].done():
+        group['timer_task'].cancel()
+        try:
+            await group['timer_task']
+        except asyncio.CancelledError:
+            pass
+
+    # Start new timer to process group after timeout
+    async def process_after_timeout():
+        try:
+            await asyncio.sleep(MEDIA_GROUP_TIMEOUT)
+            if media_group_id in pending_media_groups:
+                group_data = pending_media_groups.pop(media_group_id)
+                if group_data['photos']:
+                    await process_media_group_complete(
+                        message=group_data['message'],
+                        state=group_data['state'],
+                        photos=group_data['photos'],
+                        language=group_data['language'],
+                        forwarded_data=group_data.get('forwarded_data')
+                    )
+        except asyncio.CancelledError:
+            # Timer was cancelled, which is expected when new photo arrives
+            pass
+
+    group['timer_task'] = asyncio.create_task(process_after_timeout())
+
+    return True  # Is a media group
 
 async def safe_edit_text(message: types.Message, text: str, reply_markup=None):
     """Safely edit message text with error handling"""
@@ -132,15 +289,25 @@ async def cmd_start(message: types.Message):
 async def cmd_help(message: types.Message):
     """Show all available commands"""
     language = i18n.get_user_language(message.from_user.language_code)
-    
+
+    # Check if user is admin (moderator)
+    is_admin = message.from_user.id in config.admin_ids
+
     help_text = (
         f"{t('commands.help.title', language)}\n\n"
         f"{t('commands.help.general_title', language)}\n"
         f"{t('commands.help.general_commands', language)}\n\n"
         f"{t('commands.help.posters_title', language)}\n"
-        f"{t('commands.help.posters_commands', language)}\n\n"
-        f"{t('commands.help.footer', language)}"
+        f"{t('commands.help.posters_commands', language)}"
     )
+
+    # Show moderator commands only for admins
+    if is_admin:
+        help_text += f"\n\n{t('commands.help.moderator_title', language)}\n"
+        help_text += f"{t('commands.help.moderator_commands', language)}"
+
+    help_text += f"\n\n{t('commands.help.footer', language)}"
+    
     await message.answer(help_text, parse_mode="HTML")
 
 @commands_router.message(Command("poster"))
@@ -220,13 +387,13 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
 @poster_router.message(F.photo | F.forward_origin)
 async def process_photo_without_command(message: types.Message, state: FSMContext):
     """Auto-start poster flow when user sends photo or forwards message (without /poster)"""
-    
+
     language = i18n.get_user_language(message.from_user.language_code)
-    
+
     # ✅ Clear any existing state and start fresh
     await state.clear()
     await state.set_state(PosterSubmission.waiting_for_photo)
-    
+
     # ✅ Register/update user in database
     with get_session() as session:
         get_or_create_user(
@@ -238,7 +405,7 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
             language_code=message.from_user.language_code,
             is_premium=message.from_user.is_premium or False
         )
-    
+
     # ============ HANDLE FORWARDED MESSAGE ============
     if message.forward_origin:
         # Extract info from forwarded message
@@ -253,10 +420,16 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
             await state.clear()
             return
 
-        # Use forwarded data as poster data
+        # Check if this is part of a forwarded media group (album)
+        if message.media_group_id:
+            # Handle as media group - collect all photos with timeout
+            await handle_media_group_message(message, state, forwarded_data)
+            return  # Don't proceed yet - waiting for more photos
+        
+        # Single forwarded message (not album)
         caption = forwarded_data.get('caption', '')
         photo_file_id = forwarded_data.get('photo_file_id')
-        telegram_link = forwarded_data.get('telegram_link')  # ← NEW
+        telegram_link = forwarded_data.get('telegram_link')
 
         # Add attribution note WITH link
         if forwarded_data.get('is_channel_forward') and forwarded_data.get('source_name'):
@@ -266,12 +439,9 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
             else:
                 caption = f"{caption}\n\n{t('poster_flow.forwarded.attribution', language, source=forwarded_data['source_name'])}"
 
-        # ✅ For forwarded messages with Telegram link, skip link validation
-        # The Telegram link IS the event link!
+        # Validate caption if no Telegram link
         is_valid = True
         error_message = ""
-
-        # But if no Telegram link (private channel), require link in caption
         if not telegram_link:
             is_valid, error_message = validate_caption(caption)
 
@@ -288,12 +458,20 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
             first_name=message.from_user.first_name,
             is_forwarded=True,
             forward_source=forwarded_data.get('source_name'),
-            telegram_link=telegram_link,  # ← Store for moderation
-            language=language  # ← Store language for preview formatting
+            telegram_link=telegram_link,
+            language=language
         )
-        
-    # ============ HANDLE PHOTO ============
+
+    # ============ HANDLE PHOTO (INCLUDING MEDIA GROUPS) ============
     elif message.photo:
+        # Check if this is part of a media group (album)
+        if message.media_group_id:
+            # Handle as media group - collect all photos with timeout
+            is_group = await handle_media_group_message(message, state)
+            if is_group:
+                return  # Don't proceed yet - waiting for more photos
+        
+        # Single photo (not part of album)
         caption = message.caption or ""
 
         is_valid, error_message = validate_caption(caption)
@@ -309,9 +487,9 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
             username=message.from_user.username,
             first_name=message.from_user.first_name,
             is_forwarded=False,
-            language=language  # ← Store language for preview formatting
+            language=language
         )
-    
+
     # ============ INVALID INPUT ============
     else:
         await message.answer(
@@ -320,10 +498,10 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
         )
         await state.clear()
         return
-    
+
     # ============ COMMON: Proceed to Next Step ============
     await state.set_state(PosterSubmission.waiting_for_anonymous)
-    
+
     # Send next step (anonymous choice) - this is the "initial instruction" for auto-start
     sent = await message.answer(
         f"{t('poster_flow.anonymous.title', language)}\n\n"
@@ -331,12 +509,12 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
         parse_mode="HTML",
         reply_markup=anonymous_choice_keyboard(language).as_markup()
     )
-    
+
     await state.update_data(
         first_message_id=sent.message_id,
         prev_bot_message_id=sent.message_id
     )
-    
+
     logger.info(f"Auto-started poster flow for user {message.from_user.id}")
 
 # =============================================================================
@@ -347,17 +525,26 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
 @poster_router.message(PosterSubmission.waiting_for_photo, F.photo)
 async def process_photo(message: types.Message, state: FSMContext):
     """Handle photo submission with caption validation (after /poster command)"""
-    
+
     language = i18n.get_user_language(message.from_user.language_code)
-    caption = message.caption or ""
+
+    # Check if this is part of a media group (album)
+    if message.media_group_id:
+        # Handle as media group - collect all photos with timeout
+        is_group = await handle_media_group_message(message, state)
+        if is_group:
+            return  # Don't proceed yet - waiting for more photos
     
+    # Single photo (not part of album)
+    caption = message.caption or ""
+
     # Validate caption (just check for link)
     is_valid, error_message = validate_caption(caption)
-    
+
     if not is_valid:
         await handle_validation_error(message, state, error_message, language)
         return
-    
+
     # Caption is valid - proceed with flow
     await state.update_data(
         photo_file_id=message.photo[-1].file_id,
@@ -365,14 +552,15 @@ async def process_photo(message: types.Message, state: FSMContext):
         user_id=message.from_user.id,
         username=message.from_user.username,
         first_name=message.from_user.first_name,
-        is_forwarded=False
+        is_forwarded=False,
+        language=language
     )
-    
+
     await state.set_state(PosterSubmission.waiting_for_anonymous)
-    
+
     # Delete previous bot messages
     await cleanup_previous_messages(message, state)
-    
+
     # Send next step
     sent = await message.answer(
         f"{t('poster_flow.anonymous.title', language)}\n\n"
@@ -380,7 +568,7 @@ async def process_photo(message: types.Message, state: FSMContext):
         parse_mode="HTML",
         reply_markup=anonymous_choice_keyboard(language).as_markup()
     )
-    
+
     await state.update_data(prev_bot_message_id=sent.message_id)
 
 # =============================================================================
@@ -506,7 +694,7 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
     """Save poster to database and send to moderation"""
     language = i18n.get_user_language(callback.from_user.language_code)
     data = await state.get_data()
-    
+
     try:
         with get_session() as session:
             poster = create_poster(
@@ -515,9 +703,10 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
                 photo_file_id=data['photo_file_id'],
                 caption=data.get('caption', ''),
                 event_date=datetime.fromisoformat(data['event_date']),
-                is_anonymous=data['is_anonymous']
+                is_anonymous=data['is_anonymous'],
+                photos_json=data.get('photos_json')  # ← NEW: Store media group photos
             )
-            
+
             # Send to moderation chat
             from bot.keyboards import moderation_keyboard
             from utils.helpers import format_moderation_caption
@@ -532,23 +721,77 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
             }
 
             mod_caption = format_moderation_caption(mod_data, poster.id, language)
-            
+
             keyboard = moderation_keyboard(
                 user_id=data['user_id'],
                 is_anonymous=data['is_anonymous'],
                 poster_id=poster.id,
                 language=language
             ).as_markup()
+
+            # ✅ Check if this is a media group (album)
+            is_media_group = data.get('is_media_group', False)
             
-            # ✅ Send photo and store message ID
-            sent_message = await callback.bot.send_photo(
-                chat_id=config.moderation_chat_id,
-                photo=data['photo_file_id'],
-                caption=mod_caption,
-                parse_mode="HTML",
-                reply_markup=keyboard
-            )
-            
+            if is_media_group:
+                # Send album to moderation
+                photos_json = data.get('photos_json')
+                if photos_json:
+                    photos_list = json.loads(photos_json)
+                    
+                    # Create media group for moderation
+                    media_group = []
+                    for i, photo_data in enumerate(photos_list):
+                        if i == 0:
+                            # First photo gets the full caption
+                            media_group.append(
+                                InputMediaPhoto(
+                                    media=photo_data['file_id'],
+                                    caption=mod_caption,
+                                    parse_mode="HTML"
+                                )
+                            )
+                        else:
+                            # Subsequent photos without caption
+                            media_group.append(
+                                InputMediaPhoto(
+                                    media=photo_data['file_id']
+                                )
+                            )
+                    
+                    # Send media group (no reply_markup - send separately)
+                    sent_messages = await callback.bot.send_media_group(
+                        chat_id=config.moderation_chat_id,
+                        media=media_group
+                    )
+                    
+                    # Store first message ID for moderation
+                    sent_message = sent_messages[0]
+                    
+                    # Send keyboard as separate message below the album
+                    await callback.bot.send_message(
+                        chat_id=config.moderation_chat_id,
+                        text=t('moderation.actions', language),
+                        reply_markup=keyboard
+                    )
+                else:
+                    # Fallback to single photo if something went wrong
+                    sent_message = await callback.bot.send_photo(
+                        chat_id=config.moderation_chat_id,
+                        photo=data['photo_file_id'],
+                        caption=mod_caption,
+                        parse_mode="HTML",
+                        reply_markup=keyboard
+                    )
+            else:
+                # Send single photo
+                sent_message = await callback.bot.send_photo(
+                    chat_id=config.moderation_chat_id,
+                    photo=data['photo_file_id'],
+                    caption=mod_caption,
+                    parse_mode="HTML",
+                    reply_markup=keyboard
+                )
+
             # ✅ Store moderation message info in DB
             update_moderation_message_info(
                 session=session,
@@ -556,7 +799,7 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
                 moderation_message_id=sent_message.message_id,
                 moderation_chat_id=config.moderation_chat_id
             )
-        
+
         await safe_edit_text(
             callback.message,
             text=(
@@ -565,10 +808,10 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
             ),
             reply_markup=None
         )
-        
+
         await state.clear()
-        logger.info(f"Poster {poster.id} submitted by user {data['user_id']}")
-        
+        logger.info(f"Poster {poster.id} submitted by user {data['user_id']} (media_group={is_media_group})")
+
     except Exception as e:
         logger.error(f"Submission failed: {e}")
         await callback.answer(t('common.error', language), show_alert=True)

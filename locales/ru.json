@@ -59,6 +59,7 @@
     },
     "preview": {
       "photo_attached": "📸 <b>Фото:</b> Прикреплено",
+      "photos_count": "{count} фото",
       "description_label": "📝 <b>Описание:</b>",
       "no_description": "Нет описания",
       "date_label": "📅 Дата:",
@@ -171,6 +172,7 @@
       "published_channel": "🔗 Опубликовано: {channel_link}",
       "poster_published": "✅ <b>Афиша #{poster_id} опубликована!</b>"
     },
+    "actions": "Выберите действие:",
     "preview": {
       "submission_title": "📨 <b>Новая афиша на модерацию</b>",
       "poster_id": "🆔 ID афиши: <code>{poster_id}</code>",

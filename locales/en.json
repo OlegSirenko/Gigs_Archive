@@ -59,6 +59,7 @@
     },
     "preview": {
       "photo_attached": "📸 <b>Photo:</b> Attached",
+      "photos_count": "{count}|photo|photos}",
       "description_label": "📝 <b>Description:</b>",
       "no_description": "No description",
       "date_label": "📅 Date:",
@@ -104,13 +105,6 @@
       "title": "📅 <b>When is the event?</b>",
       "description": "<i>Select a date from the options below:</i>",
       "back": "⬅️ Back"
-    },
-    "confirmation": {
-      "title": "✅ <b>Review Before Publishing</b>",
-      "preview_hint": "👁️ <i>Review the poster before sending for moderation:</i>",
-      "publish": "✅ Publish",
-      "edit": "✏️ Edit",
-      "cancel": "❌ Cancel"
     },
     "edit": {
       "title": "✏️ <b>Edit Poster</b>",
@@ -171,6 +165,7 @@
       "published_channel": "🔗 Published: {channel_link}",
       "poster_published": "✅ <b>Poster #{poster_id} published!</b>"
     },
+    "actions": "Select action:",
     "preview": {
       "submission_title": "📨 <b>New Poster Submission</b>",
       "poster_id": "🆔 Poster ID: <code>{poster_id}</code>",

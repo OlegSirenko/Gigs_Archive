@@ -7,11 +7,12 @@ Separated from user handlers for clarity.
 import re
 import asyncio
 import logging
+import json
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.types import InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, InputMediaPhoto
 from sqlalchemy import and_, func
 from sqlalchemy.orm import joinedload
 from db.crud import get_moderator_stats
@@ -597,21 +598,20 @@ async def process_moderator_description(message: types.Message, state: FSMContex
 @moderator_edit_router.callback_query(ModeratorEdit.waiting_for_confirmation, F.data.startswith("moderator:confirm:"))
 async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
     """Final confirmation - publish to channel"""
-    
+
     language = i18n.get_user_language(callback.from_user.language_code)
     poster_id = int(callback.data.split(":")[2])
     data = await state.get_data()
-    
+
     with get_session() as session:
         poster = get_poster(session, poster_id)
         user_id = poster.user_id
-        
+
         target_channel_id = config.test_channel_id if config.debug_mode else config.main_channel_id
-        
-        # ✅ SAVE MODERATOR'S FINAL CAPTION TO DATABASE ← ADD THIS LINE
+
+        # ✅ SAVE MODERATOR'S FINAL CAPTION TO DATABASE
         poster.caption = data.get("final_caption")
-        # No need to commit here - update_poster_status will do it
-        
+
         final_caption = format_public_caption(
             data={
                 "caption": data.get("final_caption"),
@@ -624,17 +624,64 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
             },
             language=language
         )
-        
+
         if config.debug_mode:
             final_caption += t("moderation.action.test_mode_caption", language)
+
+        # ✅ Check if this is a media group (album)
+        photos_json = poster.photos_json or data.get("photos_json")
         
-        # Publish to channel
-        sent_message = await callback.bot.send_photo(
-            chat_id=target_channel_id,
-            photo=data.get("photo_file_id"),
-            caption=final_caption,
-            parse_mode="HTML"
-        )
+        if photos_json:
+            # Send album to channel
+            try:
+                photos_list = json.loads(photos_json)
+                
+                # Create media group for channel
+                media_group = []
+                for i, photo_data in enumerate(photos_list):
+                    if i == 0:
+                        # First photo gets the full caption
+                        media_group.append(
+                            InputMediaPhoto(
+                                media=photo_data['file_id'],
+                                caption=final_caption,
+                                parse_mode="HTML"
+                            )
+                        )
+                    else:
+                        # Subsequent photos without caption
+                        media_group.append(
+                            InputMediaPhoto(
+                                media=photo_data['file_id']
+                            )
+                        )
+                
+                # Send media group to channel
+                sent_messages = await callback.bot.send_media_group(
+                    chat_id=target_channel_id,
+                    media=media_group
+                )
+                
+                # Store first message ID
+                sent_message = sent_messages[0]
+                
+            except Exception as e:
+                logger.error(f"Error sending media group to channel: {e}")
+                # Fallback to single photo
+                sent_message = await callback.bot.send_photo(
+                    chat_id=target_channel_id,
+                    photo=data.get("photo_file_id") or poster.photo_file_id,
+                    caption=final_caption,
+                    parse_mode="HTML"
+                )
+        else:
+            # Send single photo to channel
+            sent_message = await callback.bot.send_photo(
+                chat_id=target_channel_id,
+                photo=data.get("photo_file_id") or poster.photo_file_id,
+                caption=final_caption,
+                parse_mode="HTML"
+            )
         
         # Update database to APPROVED (final) - this will commit the caption change too!
         update_poster_status(

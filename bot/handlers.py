@@ -24,12 +24,13 @@ from bot.keyboards import (
     language_selection_keyboard,
     privacy_policy_keyboard
 )
-from db.models import get_session, User
+from db.models import get_session, User, Poster
 from db.crud import get_or_create_user, create_poster, get_user_stats
 from utils.helpers import format_preview_text, validate_caption, extract_forwarded_info
 from utils.i18n import i18n, t
 from config import config
 from datetime import datetime
+from sqlalchemy import delete as sql_delete
 
 logger = logging.getLogger(__name__)
 
@@ -388,6 +389,18 @@ async def confirm_delete_account(callback: types.CallbackQuery):
     await callback.answer()
 
 
+@commands_router.callback_query(F.data == "delete:cancel")
+async def delete_back(callback: types.CallbackQuery):
+    """Go back from privacy policy"""
+    
+    # Just delete the privacy message
+    try:
+        await callback.message.delete()
+    except:
+        pass
+    
+    await callback.answer()
+
 @commands_router.callback_query(F.data.startswith("delete:execute:"))
 async def execute_delete_account(callback: types.CallbackQuery):
     """Execute account deletion"""
@@ -436,6 +449,8 @@ async def execute_delete_account(callback: types.CallbackQuery):
         )
         
         await callback.answer()
+
+
 
 
 @commands_router.callback_query(F.data == "privacy:back")

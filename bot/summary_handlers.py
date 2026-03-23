@@ -221,7 +221,7 @@ def format_auto_friday_summary(
 async def cmd_summary(message: types.Message):
     """📊 Show weekly summary with prime-time highlighting"""
     
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
     
     # 📅 Calculate week boundaries (Mon–Sun)
     today = datetime.now().date()
@@ -270,7 +270,7 @@ async def cmd_summary(message: types.Message):
 async def cmd_subscribe_on(message: types.Message):
     """✅ Enable weekly Friday summary"""
 
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
 
     with get_session() as session:
         user = get_user(session, message.from_user.id)
@@ -290,7 +290,7 @@ async def cmd_subscribe_on(message: types.Message):
 async def cmd_subscribe_off(message: types.Message):
     """❌ Disable weekly Friday summary"""
 
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
 
     with get_session() as session:
         user = get_user(session, message.from_user.id)

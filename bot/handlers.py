@@ -19,9 +19,10 @@ from bot.keyboards import (
     start_over_keyboard,
     anonymous_choice_keyboard,
     date_picker_keyboard,
-    confirmation_keyboard
+    confirmation_keyboard,
+    language_selection_keyboard
 )
-from db.models import get_session
+from db.models import get_session, User
 from db.crud import get_or_create_user, create_poster, get_user_stats
 from utils.helpers import format_preview_text, validate_caption, extract_forwarded_info
 from utils.i18n import i18n, t
@@ -138,7 +139,7 @@ async def handle_media_group_message(message: types.Message, state: FSMContext, 
     if not media_group_id:
         return False  # Not a media group
 
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
 
     # Initialize group if first photo
     if media_group_id not in pending_media_groups:
@@ -267,28 +268,58 @@ async def cleanup_previous_messages(message: types.Message, state: FSMContext):
 @commands_router.message(Command("start"))
 async def cmd_start(message: types.Message):
     """Handle /start command"""
-    language = i18n.get_user_language(message.from_user.language_code)
-    
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
+
+    # Check if this is the first time user starts the bot
+    with get_session() as session:
+        user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
+        is_first_start = user is None
+        
+        # Register user if not exists
+        if is_first_start:
+            get_or_create_user(
+                session,
+                telegram_id=message.from_user.id,
+                username=message.from_user.username,
+                first_name=message.from_user.first_name,
+                last_name=message.from_user.last_name,
+                language_code=message.from_user.language_code,
+                is_premium=message.from_user.is_premium or False
+            )
+
     # ✅ Load steps array and format with numbers
     steps_list = i18n.t('commands.start.steps', language)
     if isinstance(steps_list, list):
         steps = "\n".join([f"{i}. {step}" for i, step in enumerate(steps_list, 1)])
     else:
         steps = steps_list
+
+    # Language selection hint (bilingual) - only show on first start
+    lang_hint = ""
+    reply_markup = None
     
+    if is_first_start:
+        lang_hint = (
+            f"\n\n{t('common.language', language)}\n"
+            f"🇷🇺 Русский | 🇬🇧 English"
+        )
+        reply_markup = language_selection_keyboard().as_markup()
+
     await message.answer(
         f"{t('commands.start.title', language)}\n\n"
         f"{t('commands.start.description', language)}\n\n"
         f"{t('commands.start.how_to', language)}\n"
         f"{steps}\n\n"
-        f"{t('commands.start.footer', language)}",
-        parse_mode="HTML"
+        f"{t('commands.start.footer', language)}"
+        f"{lang_hint}",
+        parse_mode="HTML",
+        reply_markup=reply_markup
     )
 
 @commands_router.message(Command("help"))
 async def cmd_help(message: types.Message):
     """Show all available commands"""
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
 
     # Check if user is admin (moderator)
     is_admin = message.from_user.id in config.admin_ids
@@ -298,7 +329,9 @@ async def cmd_help(message: types.Message):
         f"{t('commands.help.general_title', language)}\n"
         f"{t('commands.help.general_commands', language)}\n\n"
         f"{t('commands.help.posters_title', language)}\n"
-        f"{t('commands.help.posters_commands', language)}"
+        f"{t('commands.help.posters_commands', language)}\n\n"
+        f"{t('commands.help.subscription_title', language)}\n"
+        f"{t('commands.help.subscription_commands', language)}"
     )
 
     # Show moderator commands only for admins
@@ -307,15 +340,73 @@ async def cmd_help(message: types.Message):
         help_text += f"{t('commands.help.moderator_commands', language)}"
 
     help_text += f"\n\n{t('commands.help.footer', language)}"
-    
+
     await message.answer(help_text, parse_mode="HTML")
+
+
+@commands_router.message(Command("language"))
+async def cmd_language(message: types.Message):
+    """Show language selection keyboard"""
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
+
+    await message.answer(
+        f"{t('common.language', language)}\n\n"
+        f"🇷🇺 Русский | 🇬🇧 English",
+        reply_markup=language_selection_keyboard().as_markup()
+    )
+
+@commands_router.callback_query(F.data.startswith("lang:"))
+async def handle_language_selection(callback: types.CallbackQuery):
+    """Handle user's language selection"""
+    selected_lang = callback.data.split(":")[1]  # "ru" or "en"
+
+    # Get language name in selected language
+    lang_name = t(f"common.language_{selected_lang}", selected_lang)
+
+    # Save user's language preference to database
+    with get_session() as session:
+        user = get_or_create_user(
+            session,
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+            last_name=callback.from_user.last_name,
+            language_code=selected_lang,
+            is_premium=callback.from_user.is_premium or False
+        )
+        # Update language preference
+        user.language_code = selected_lang
+        session.commit()
+
+    # ✅ Load steps array and format with numbers in selected language
+    steps_list = i18n.t('commands.start.steps', selected_lang)
+    if isinstance(steps_list, list):
+        steps = "\n".join([f"{i}. {step}" for i, step in enumerate(steps_list, 1)])
+    else:
+        steps = steps_list
+
+    # Send full /start message in selected language with confirmation at top
+    await callback.message.edit_text(
+        f"✅ {t('common.language_selected', selected_lang, language_name=lang_name)}\n"
+        f"{t('common.language_hint', selected_lang)}\n\n"
+        f"{t('commands.start.title', selected_lang)}\n\n"
+        f"{t('commands.start.description', selected_lang)}\n\n"
+        f"{t('commands.start.how_to', selected_lang)}\n"
+        f"{steps}\n\n"
+        f"{t('commands.start.footer', selected_lang)}",
+        parse_mode="HTML",
+        reply_markup=None  # Hide keyboard after selection
+    )
+
+    await callback.answer()
+    logger.info(f"User {callback.from_user.id} selected language: {selected_lang}")
 
 @commands_router.message(Command("poster"))
 async def cmd_poster(message: types.Message, state: FSMContext):
     """Start poster submission wizard"""
     await state.clear()
     await state.set_state(PosterSubmission.waiting_for_photo)
-    
+
     # Register/update user in database
     with get_session() as session:
         get_or_create_user(
@@ -327,8 +418,8 @@ async def cmd_poster(message: types.Message, state: FSMContext):
             language_code=message.from_user.language_code,
             is_premium=message.from_user.is_premium or False
         )
-    
-    language = i18n.get_user_language(message.from_user.language_code)
+
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
     
     sent = await message.answer(
         f"{t('poster_flow.start.title', language)}\n\n"
@@ -351,7 +442,7 @@ async def cmd_poster(message: types.Message, state: FSMContext):
 @commands_router.message(Command("stats"))
 async def cmd_stats(message: types.Message):
     """Show user statistics"""
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
     
     with get_session() as session:
         stats = get_user_stats(session, message.from_user.id)
@@ -368,7 +459,7 @@ async def cmd_stats(message: types.Message):
 @commands_router.message(Command("cancel"))
 async def cmd_cancel(message: types.Message, state: FSMContext):
     """Cancel current operation"""
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
     
     current_state = await state.get_state()
     if current_state is None:
@@ -388,7 +479,7 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
 async def process_photo_without_command(message: types.Message, state: FSMContext):
     """Auto-start poster flow when user sends photo or forwards message (without /poster)"""
 
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
 
     # ✅ Clear any existing state and start fresh
     await state.clear()
@@ -526,7 +617,7 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
 async def process_photo(message: types.Message, state: FSMContext):
     """Handle photo submission with caption validation (after /poster command)"""
 
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
 
     # Check if this is part of a media group (album)
     if message.media_group_id:
@@ -578,7 +669,7 @@ async def process_photo(message: types.Message, state: FSMContext):
 @poster_router.message(PosterSubmission.waiting_for_photo, ~F.photo & ~F.forward_origin)
 async def invalid_photo(message: types.Message):
     """Reject non-photo, non-forwarded messages"""
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
     await message.answer(
         t('poster_flow.invalid_photo.text', language),
         parse_mode="HTML"
@@ -591,7 +682,7 @@ async def invalid_photo(message: types.Message):
 @poster_router.callback_query(PosterSubmission.waiting_for_anonymous, F.data.startswith("anon:"))
 async def process_anonymous(callback: types.CallbackQuery, state: FSMContext):
     """Handle anonymous preference"""
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     
     is_anonymous = callback.data.split(":")[1] == "yes"
     await state.update_data(is_anonymous=is_anonymous)
@@ -615,7 +706,7 @@ async def process_anonymous(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(PosterSubmission.waiting_for_anonymous, F.data == "poster:back_to_photo")
 async def back_to_photo(callback: types.CallbackQuery, state: FSMContext):
     """Go back to photo step"""
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     
     await state.set_state(PosterSubmission.waiting_for_photo)
     
@@ -638,7 +729,7 @@ async def back_to_photo(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(PosterSubmission.waiting_for_date, F.data.startswith("date:"))
 async def process_date_selection(callback: types.CallbackQuery, state: FSMContext):
     """Handle date selection from custom picker"""
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     
     date_str = callback.data.split(":")[1]
     
@@ -663,7 +754,7 @@ async def process_date_selection(callback: types.CallbackQuery, state: FSMContex
 @poster_router.callback_query(PosterSubmission.waiting_for_date, F.data == "poster:back_to_anon")
 async def back_to_anonymous(callback: types.CallbackQuery, state: FSMContext):
     """Go back to anonymous selection"""
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     
     await state.set_state(PosterSubmission.waiting_for_anonymous)
     
@@ -692,7 +783,7 @@ async def back_to_anonymous(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(PosterSubmission.waiting_for_confirmation, F.data == "poster:confirm")
 async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
     """Save poster to database and send to moderation"""
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     data = await state.get_data()
 
     try:
@@ -819,7 +910,7 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(PosterSubmission.waiting_for_confirmation, F.data == "poster:edit")
 async def edit_submission(callback: types.CallbackQuery, state: FSMContext):
     """Return to photo step for editing"""
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     
     await state.set_state(PosterSubmission.waiting_for_photo)
     
@@ -842,7 +933,7 @@ async def edit_submission(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(F.data == "poster:cancel")
 async def cancel_submission(callback: types.CallbackQuery, state: FSMContext):
     """Cancel submission from any step"""
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     
     data = await state.get_data()
     has_photo = "photo_file_id" in data
@@ -881,7 +972,7 @@ async def cancel_submission(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(F.data == "poster:retry_photo")
 async def retry_photo(callback: types.CallbackQuery, state: FSMContext):
     """Handle retry after validation error"""
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     
     # Delete the error message
     try:
@@ -910,7 +1001,7 @@ async def retry_photo(callback: types.CallbackQuery, state: FSMContext):
 @poster_router.callback_query(F.data == "poster:start_over")
 async def start_over(callback: types.CallbackQuery, state: FSMContext):
     """Restart poster submission after cancellation"""
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     
     await state.clear()
     await state.set_state(PosterSubmission.waiting_for_photo)

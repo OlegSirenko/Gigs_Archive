@@ -101,6 +101,16 @@ def confirmation_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     return builder
 
 
+def language_selection_keyboard() -> InlineKeyboardBuilder:
+    """Language selection keyboard (shown after /start)"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang:ru"),
+        InlineKeyboardButton(text="🇬🇧 English", callback_data="lang:en")
+    )
+    return builder
+
+
 # =============================================================================
 # ============ MODERATOR KEYBOARDS (Moderation Flow) ==========================
 # =============================================================================

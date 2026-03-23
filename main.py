@@ -43,6 +43,7 @@ async def setup_bot_commands(bot: Bot):
     default_commands_ru = [
         types.BotCommand(command="start", description=t("commands.menu.start", "ru")),
         types.BotCommand(command="help", description=t("commands.menu.help", "ru")),
+        types.BotCommand(command="language", description=t("commands.menu.language", "ru")),
         types.BotCommand(command="poster", description=t("commands.menu.poster", "ru")),
         types.BotCommand(command="stats", description=t("commands.menu.stats", "ru")),
         types.BotCommand(command="summary", description=t("commands.menu.summary", "ru")),
@@ -55,6 +56,7 @@ async def setup_bot_commands(bot: Bot):
     default_commands_en = [
         types.BotCommand(command="start", description=t("commands.menu.start", "en")),
         types.BotCommand(command="help", description=t("commands.menu.help", "en")),
+        types.BotCommand(command="language", description=t("commands.menu.language", "en")),
         types.BotCommand(command="poster", description=t("commands.menu.poster", "en")),
         types.BotCommand(command="stats", description=t("commands.menu.stats", "en")),
         types.BotCommand(command="summary", description=t("commands.menu.summary", "en")),
@@ -81,16 +83,6 @@ async def setup_bot_commands(bot: Bot):
             commands=default_commands_ru,
             scope=types.BotCommandScopeDefault()
         )
-
-        # 2. Set commands for English users (if BotCommandScopeLanguage is available)
-        try:
-            from aiogram.types import BotCommandScopeLanguage
-            await bot.set_my_commands(
-                commands=default_commands_en,
-                scope=BotCommandScopeLanguage(language_code="en")
-            )
-        except ImportError:
-            logger.info("BotCommandScopeLanguage not available - English commands will use default")
 
         # 3. Set admin commands for each admin in their DM
         for admin_id in config.admin_ids:

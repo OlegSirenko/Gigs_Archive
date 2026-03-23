@@ -10,7 +10,8 @@
       "sub_off": "❌ Unsubscribe from digest",
       "cancel": "❌ Cancel action",
       "pending": "⏳ Pending moderation",
-      "mystats": "📊 Moderator statistics"
+      "mystats": "📊 Moderator statistics",
+      "language": "🌐 Change language"
     },
     "start": {
       "title": "👋 <b>Welcome to Gigs Archive Bot!</b>",
@@ -29,7 +30,7 @@
     "help": {
       "title": "📚 <b>Available Commands</b>",
       "general_title": "🔹 <b>General</b>",
-      "general_commands": "/start — Start the bot\n/help — Show this help\n",
+      "general_commands": "/start — Start the bot\n/help — Show this help\n/language — 🌐 Change language\n",
       "posters_title": "🔹 <b>Posters</b>",
       "posters_commands": "/poster — Submit a new poster\n/stats — Your publication statistics\n/cancel — Cancel current action",
       "subscription_title": "🔹 <b>Subscription</b>",
@@ -271,7 +272,12 @@
     "back": "⬅️ Back",
     "cancel": "❌ Cancel",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "language": "🌐 Выберите язык / Select Language",
+    "language_selected": "<b>Language changed to {language_name}</b>",
+    "language_hint": "ℹ️ Use command /language to change it.",
+    "language_ru": "🇷🇺 Русский",
+    "language_en": "🇬🇧 English"
   },
   "weekly_summary": {
     "title": "📊 <b>Weekly Event Summary</b>",

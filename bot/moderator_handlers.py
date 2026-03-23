@@ -47,7 +47,7 @@ moderator_edit_router = Router(name="moderator_edit") # Moderator DM handlers
 async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMContext):
     """Process moderator approve/decline decision"""
     
-    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)  # ← ADDED
     
     if callback.from_user.id not in config.admin_ids:
         await callback.answer(t("common.not_authorized", language), show_alert=True)  # ← CHANGED
@@ -70,7 +70,7 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
             # bot/moderator_handlers.py - In handle_moderation_decision, approve section
 
             if action == "approve":
-                language = i18n.get_user_language(callback.from_user.language_code)
+                language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
                 
                 with get_session() as session:
                     poster = get_poster(session, poster_id)
@@ -179,7 +179,7 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
 async def handle_decline_reason(callback: types.CallbackQuery):
     """Handle decline reason selection"""
     
-    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)  # ← ADDED
     
     # Check if moderator is admin
     if callback.from_user.id not in config.admin_ids:
@@ -266,7 +266,7 @@ async def handle_decline_reason(callback: types.CallbackQuery):
 async def cancel_decline(callback: types.CallbackQuery):
     """Cancel decline action and restore original keyboard"""
 
-    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)  # ← ADDED
 
     # Check if moderator is admin
     if callback.from_user.id not in config.admin_ids:
@@ -333,7 +333,7 @@ async def cancel_decline(callback: types.CallbackQuery):
 async def handle_userinfo(callback: types.CallbackQuery):
     """Show information about the user who submitted the poster"""
     
-    language = i18n.get_user_language(callback.from_user.language_code)  # ← ADDED
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)  # ← ADDED
     
     # Check if moderator is admin
     if callback.from_user.id not in config.admin_ids:
@@ -408,7 +408,7 @@ async def handle_userinfo(callback: types.CallbackQuery):
 async def close_userinfo(callback: types.CallbackQuery):
     """Close the user info message"""
 
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
 
     try:
         # Delete the user info message
@@ -427,7 +427,7 @@ async def close_userinfo(callback: types.CallbackQuery):
 async def skip_description(callback: types.CallbackQuery, state: FSMContext):
     """Handle skip button - FIRST response in DM (sets FSM state)"""
     
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     poster_id = int(callback.data.split(":")[2])
     
     with get_session() as session:
@@ -488,7 +488,7 @@ async def skip_description(callback: types.CallbackQuery, state: FSMContext):
 async def process_moderator_description(message: types.Message, state: FSMContext):
     """Handle moderator typing description - EDIT the stored instruction message"""
     
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
     moderator_id = message.from_user.id
     
     with get_session() as session:
@@ -599,7 +599,7 @@ async def process_moderator_description(message: types.Message, state: FSMContex
 async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
     """Final confirmation - publish to channel"""
 
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     poster_id = int(callback.data.split(":")[2])
     data = await state.get_data()
 
@@ -762,7 +762,7 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
 async def edit_again(callback: types.CallbackQuery, state: FSMContext):
     """Let moderator edit description again"""
 
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
 
     await state.set_state(ModeratorEdit.waiting_for_description)
 
@@ -778,7 +778,7 @@ async def edit_again(callback: types.CallbackQuery, state: FSMContext):
 async def final_cancel(callback: types.CallbackQuery, state: FSMContext):
     """Cancel final publishing - return to pending and restore keyboard"""
     
-    language = i18n.get_user_language(callback.from_user.language_code)
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     poster_id = int(callback.data.split(":")[2])
     data = await state.get_data()
     moderator_id = callback.from_user.id
@@ -848,7 +848,7 @@ async def final_cancel(callback: types.CallbackQuery, state: FSMContext):
 async def cmd_pending(message: types.Message):
     """Show pending posters with moderation message IDs"""
 
-    language = i18n.get_user_language(message.from_user.language_code)
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
 
     with get_session() as session:
         # ✅ Use joinedload to eagerly load user relationship
@@ -912,7 +912,7 @@ async def cmd_pending(message: types.Message):
 async def cmd_moderator_stats(message: types.Message):
     """Show moderator's personal statistics"""
     
-    language = i18n.get_user_language(message.from_user.language_code)  # ← ADDED
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)  # ← ADDED
     moderator_id = message.from_user.id
     
     with get_session() as session:

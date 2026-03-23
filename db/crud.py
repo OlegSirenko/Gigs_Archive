@@ -21,7 +21,8 @@ def get_or_create_user(session: Session, telegram_id: int, **kwargs) -> User:
             first_name=kwargs.get("first_name", "Unknown"),
             last_name=kwargs.get("last_name"),
             language_code=kwargs.get("language_code"),
-            is_premium=kwargs.get("is_premium", False)
+            is_premium=kwargs.get("is_premium", False),
+            subscribe_weekly=kwargs.get("subscribe_weekly", False)
         )
         session.add(user)
         session.commit()

@@ -39,62 +39,43 @@ dp.include_routers(commands_router, summary_router, poster_router, moderation_ro
 async def setup_bot_commands(bot: Bot):
     """Set up bot commands for different scopes and languages"""
 
-    # Default commands for all users (Russian - default)
-    default_commands_ru = [
-        types.BotCommand(command="start", description=t("commands.menu.start", "ru")),
-        types.BotCommand(command="help", description=t("commands.menu.help", "ru")),
-        types.BotCommand(command="language", description=t("commands.menu.language", "ru")),
-        types.BotCommand(command="poster", description=t("commands.menu.poster", "ru")),
-        types.BotCommand(command="stats", description=t("commands.menu.stats", "ru")),
-        types.BotCommand(command="summary", description=t("commands.menu.summary", "ru")),
-        types.BotCommand(command="sub_on", description=t("commands.menu.sub_on", "ru")),
-        types.BotCommand(command="sub_off", description=t("commands.menu.sub_off", "ru")),
-        types.BotCommand(command="cancel", description=t("commands.menu.cancel", "ru")),
+    # Default commands for all users (bilingual RU/EN)
+    default_commands = [
+        types.BotCommand(command="start", description="🚀 Запустить бота / Start bot"),
+        types.BotCommand(command="help", description="📚 Список команд / Commands"),
+        types.BotCommand(command="language", description="🌐 Изменить язык / Language"),
+        types.BotCommand(command="poster", description="📸 Отправить афишу / Submit poster"),
+        types.BotCommand(command="stats", description="📊 Моя статистика / My stats"),
+        types.BotCommand(command="summary", description="🗓️ Подборка событий / Events"),
+        types.BotCommand(command="sub_on", description="✅ Подписаться / Subscribe"),
+        types.BotCommand(command="sub_off", description="❌ Отписаться / Unsubscribe"),
+        types.BotCommand(command="cancel", description="❌ Отменить / Cancel"),
     ]
 
-    # English commands
-    default_commands_en = [
-        types.BotCommand(command="start", description=t("commands.menu.start", "en")),
-        types.BotCommand(command="help", description=t("commands.menu.help", "en")),
-        types.BotCommand(command="language", description=t("commands.menu.language", "en")),
-        types.BotCommand(command="poster", description=t("commands.menu.poster", "en")),
-        types.BotCommand(command="stats", description=t("commands.menu.stats", "en")),
-        types.BotCommand(command="summary", description=t("commands.menu.summary", "en")),
-        types.BotCommand(command="sub_on", description=t("commands.menu.sub_on", "en")),
-        types.BotCommand(command="sub_off", description=t("commands.menu.sub_off", "en")),
-        types.BotCommand(command="cancel", description=t("commands.menu.cancel", "en")),
-    ]
-
-    # Admin-only commands (Russian)
-    admin_commands_ru = default_commands_ru + [
-        types.BotCommand(command="pending", description=t("commands.menu.pending", "ru")),
-        types.BotCommand(command="mystats", description=t("commands.menu.mystats", "ru")),
-    ]
-
-    # Admin-only commands (English)
-    admin_commands_en = default_commands_en + [
-        types.BotCommand(command="pending", description=t("commands.menu.pending", "en")),
-        types.BotCommand(command="mystats", description=t("commands.menu.mystats", "en")),
+    # Admin-only commands (bilingual RU/EN)
+    admin_commands = default_commands + [
+        types.BotCommand(command="pending", description="⏳ На модерации / Pending"),
+        types.BotCommand(command="mystats", description="📊 Статистика / Stats"),
     ]
 
     try:
-        # 1. Set default commands for everyone (private chats + groups) - Russian
+        # 1. Set default commands for everyone (private chats + groups)
         await bot.set_my_commands(
-            commands=default_commands_ru,
+            commands=default_commands,
             scope=types.BotCommandScopeDefault()
         )
 
-        # 3. Set admin commands for each admin in their DM
+        # 2. Set admin commands for each admin in their DM
         for admin_id in config.admin_ids:
             await bot.set_my_commands(
-                commands=admin_commands_ru,
+                commands=admin_commands,
                 scope=types.BotCommandScopeChat(chat_id=admin_id)
             )
 
-        # 4. Set admin commands for moderation chat (if configured)
+        # 3. Set admin commands for moderation chat (if configured)
         if config.moderation_chat_id:
             await bot.set_my_commands(
-                commands=admin_commands_ru,
+                commands=admin_commands,
                 scope=types.BotCommandScopeChat(chat_id=config.moderation_chat_id)
             )
 

@@ -12,6 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import InputMediaPhoto
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.states import PosterSubmission
 from bot.keyboards import (
     cancel_keyboard,
@@ -20,7 +21,8 @@ from bot.keyboards import (
     anonymous_choice_keyboard,
     date_picker_keyboard,
     confirmation_keyboard,
-    language_selection_keyboard
+    language_selection_keyboard,
+    privacy_policy_keyboard
 )
 from db.models import get_session, User
 from db.crud import get_or_create_user, create_poster, get_user_stats
@@ -288,7 +290,6 @@ async def cmd_start(message: types.Message):
                 subscribe_weekly=True  # Auto-subscribe new users to weekly digest
             )
 
-    # ✅ Load steps array and format with numbers
     steps_list = i18n.t('commands.start.steps', language)
     if isinstance(steps_list, list):
         steps = "\n".join([f"{i}. {step}" for i, step in enumerate(steps_list, 1)])
@@ -304,18 +305,151 @@ async def cmd_start(message: types.Message):
             f"\n\n{t('common.language', language)}\n"
             f"🇷🇺 Русский | 🇬🇧 English"
         )
-        reply_markup = language_selection_keyboard().as_markup()
+        reply_markup = language_selection_keyboard(language).as_markup()
+    else:
+        reply_markup = privacy_policy_keyboard(language).as_markup()
 
     await message.answer(
         f"{t('commands.start.title', language)}\n\n"
         f"{t('commands.start.description', language)}\n\n"
         f"{t('commands.start.how_to', language)}\n"
         f"{steps}\n\n"
-        f"{t('commands.start.footer', language)}"
-        f"{lang_hint}",
+        f"{t('commands.start.footer', language)}\n\n"
+        f"{t('commands.start.auto_subscribe_note', language)}\n\n"
+        f"{t('commands.start.privacy_note', language)}",
         parse_mode="HTML",
         reply_markup=reply_markup
     )
+
+
+@commands_router.callback_query(F.data == "privacy:show")
+async def show_privacy_policy(callback: types.CallbackQuery):
+    """Show privacy policy"""
+
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
+
+    privacy_text = (
+        f"{i18n.t('common.privacy_policy', language)}\n\n"
+        f"{i18n.t('common.privacy_policy_text.collect', language)}"
+        f"{i18n.t('common.privacy_policy_text.use', language)}"
+        f"{i18n.t('common.privacy_policy_text.storage', language)}"
+        f"{i18n.t('common.privacy_policy_text.rights', language)}"
+        f"{i18n.t('common.privacy_policy_text.mailing', language)}"
+        f"{i18n.t('common.privacy_policy_text.questions', language)}"
+        f"{i18n.t('common.privacy_policy_text.acception', language)}"
+    )
+    
+    # ✅ Simple back button
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        types.InlineKeyboardButton(text=i18n.t('common.back', language), callback_data="privacy:back")
+    )
+    
+    builder.row(
+        types.InlineKeyboardButton(text=i18n.t('common.delete_data', language), callback_data="delete:confirm")
+    )
+
+    await callback.message.answer(
+        privacy_text,
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
+    )
+    
+    await callback.answer()
+
+
+@commands_router.callback_query(F.data == "delete:confirm")
+async def confirm_delete_account(callback: types.CallbackQuery):
+    """Show delete confirmation dialog"""
+    
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
+    user_id = callback.from_user.id
+    
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        types.InlineKeyboardButton(
+            text=i18n.t('common.delete_account.confirm_button', language),
+            callback_data=f"delete:execute:{user_id}"
+        ),
+        types.InlineKeyboardButton(
+            text=i18n.t('common.delete_account.cancel_button', language),
+            callback_data="delete:cancel"
+        )
+    )
+    
+    await callback.message.answer(
+        f"{i18n.t('common.delete_account.warning', language)}\n\n"
+        f"{i18n.t('common.delete_account.confirm_text', language)}\n\n"
+        f"{i18n.t('common.delete_account.posters_note', language)}",
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
+    )
+    
+    await callback.answer()
+
+
+@commands_router.callback_query(F.data.startswith("delete:execute:"))
+async def execute_delete_account(callback: types.CallbackQuery):
+    """Execute account deletion"""
+    
+    user_id = int(callback.data.split(":")[2])
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
+    
+    # ✅ Verify it's the same user
+    if user_id != callback.from_user.id:
+        await callback.answer(
+            i18n.t('common.delete_account.not_your_account', language),
+            show_alert=True
+        )
+        return
+    
+    try:
+        with get_session() as session:
+            # ✅ Delete user's posters first (foreign key constraint)
+            session.execute(
+                sql_delete(Poster).where(Poster.user_id == user_id)
+            )
+            
+            # ✅ Delete user
+            session.execute(
+                sql_delete(User).where(User.telegram_id == user_id)
+            )
+            
+            session.commit()
+        
+        # ✅ Update message to show success
+        await callback.message.answer(
+            f"{i18n.t('common.delete_account.success_title', language)}\n\n"
+            f"{i18n.t('common.delete_account.success_text', language)}",
+            parse_mode="HTML"
+        )
+        
+        await callback.answer()
+        logger.info(f"✅ User {user_id} deleted their account")
+        
+    except Exception as e:
+        logger.error(f"❌ Error deleting user {user_id}: {e}")
+        
+        await callback.message.answer(
+            i18n.t('common.delete_account.error', language),
+            parse_mode="HTML"
+        )
+        
+        await callback.answer()
+
+
+@commands_router.callback_query(F.data == "privacy:back")
+async def privacy_back(callback: types.CallbackQuery):
+    """Go back from privacy policy"""
+    
+    # Just delete the privacy message
+    try:
+        await callback.message.delete()
+    except:
+        pass
+    
+    await callback.answer()
+
 
 @commands_router.message(Command("help"))
 async def cmd_help(message: types.Message):
@@ -353,7 +487,7 @@ async def cmd_language(message: types.Message):
     await message.answer(
         f"{t('common.language', language)}\n\n"
         f"🇷🇺 Русский | 🇬🇧 English",
-        reply_markup=language_selection_keyboard().as_markup()
+        reply_markup=language_selection_keyboard(language).as_markup()
     )
 
 @commands_router.callback_query(F.data.startswith("lang:"))

@@ -284,7 +284,8 @@ async def cmd_start(message: types.Message):
                 first_name=message.from_user.first_name,
                 last_name=message.from_user.last_name,
                 language_code=message.from_user.language_code,
-                is_premium=message.from_user.is_premium or False
+                is_premium=message.from_user.is_premium or False,
+                subscribe_weekly=True  # Auto-subscribe new users to weekly digest
             )
 
     # ✅ Load steps array and format with numbers

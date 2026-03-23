@@ -114,29 +114,54 @@ class i18n:
         logger.info(f"Default language set to: {language}")
     
     @classmethod
-    def get_user_language(cls, language_code: str) -> str:
+    def get_user_language(cls, language_code: str = None, telegram_id: int = None) -> str:
         """
-        Get best matching language from user's language_code.
-        
+        Get best matching language from user's language_code or database.
+
+        Priority:
+        1. Database preference (if telegram_id provided)
+        2. Telegram's language_code
+        3. Default language
+
         Telegram sends codes like: 'ru', 'en', 'en-US', 'pt-BR'
         We match to available locales: 'ru', 'en'
         """
+        # 1. Try database first if telegram_id provided
+        if telegram_id:
+            try:
+                from db.models import get_session, User
+                with get_session() as session:
+                    user = session.query(User).filter(User.telegram_id == telegram_id).first()
+                    if user and user.language_code:
+                        # Check if we have this language
+                        try:
+                            available_locales = [f.stem for f in cls._locales_path.glob("*.json")]
+                        except:
+                            available_locales = [cls._default_language]
+
+                        if user.language_code in available_locales:
+                            return user.language_code
+            except Exception as e:
+                # Silently fail and continue with language_code
+                pass
+
+        # 2. Try Telegram's language_code
         if not language_code:
             return cls._default_language
-        
+
         # Normalize: 'en-US' -> 'en'
         lang = language_code.split("-")[0].lower()
-        
+
         # Check if we have this language
         try:
             available_locales = [f.stem for f in cls._locales_path.glob("*.json")]
         except:
             available_locales = [cls._default_language]
-        
+
         if lang in available_locales:
             return lang
-        
-        # Fallback to default
+
+        # 3. Fallback to default
         return cls._default_language
     
     @classmethod

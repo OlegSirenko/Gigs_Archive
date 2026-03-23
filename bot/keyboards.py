@@ -101,15 +101,26 @@ def confirmation_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     return builder
 
 
-def language_selection_keyboard() -> InlineKeyboardBuilder:
+def language_selection_keyboard(language: str) -> InlineKeyboardBuilder:
     """Language selection keyboard (shown after /start)"""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang:ru"),
         InlineKeyboardButton(text="🇬🇧 English", callback_data="lang:en")
     )
+    builder.row(
+        InlineKeyboardButton(text=f"{i18n.t('common.privacy_policy', language)}", callback_data="privacy:show")
+    )
     return builder
 
+
+def privacy_policy_keyboard(language: str):
+    """Main keyboard for /start command (returning users)"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text=f"{i18n.t('common.privacy_policy', language)}", callback_data="privacy:show")
+    )
+    return builder
 
 # =============================================================================
 # ============ MODERATOR KEYBOARDS (Moderation Flow) ==========================

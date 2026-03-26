@@ -26,6 +26,7 @@ class User(Base):
     language_code = Column(String, nullable=True)
     is_premium = Column(Boolean, default=False)
     privacy_accepted = Column(Boolean, default=False)  # User accepted privacy policy
+    privacy_version_accepted = Column(String, nullable=True)  # Version of privacy policy accepted
 
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

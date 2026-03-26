@@ -102,14 +102,11 @@ def confirmation_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
 
 
 def language_selection_keyboard(language: str) -> InlineKeyboardBuilder:
-    """Language selection keyboard (shown after /start)"""
+    """Language selection keyboard (shown after /start on first start)"""
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang:ru"),
         InlineKeyboardButton(text="🇬🇧 English", callback_data="lang:en")
-    )
-    builder.row(
-        InlineKeyboardButton(text=f"{i18n.t('common.privacy_policy', language)}", callback_data="privacy:show")
     )
     return builder
 

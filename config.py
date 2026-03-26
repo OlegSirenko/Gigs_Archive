@@ -22,7 +22,10 @@ class Settings(BaseSettings):
     
     # Admin IDs (comma-separated string → List[int])
     admin_ids: List[int]
-    
+
+    # Privacy policy version (update to force re-acceptance)
+    privacy_policy_version: str = "1.0"
+
     # Bot username (set after bot starts)
     bot_username: str | None = None
     

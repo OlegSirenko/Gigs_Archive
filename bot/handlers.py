@@ -30,6 +30,7 @@ from db.models import get_session, User, Poster
 from db.crud import get_or_create_user, create_poster, get_user_stats
 from utils.helpers import format_preview_text, validate_caption, extract_forwarded_info
 from utils.i18n import i18n, t
+from utils.privacy import user_needs_to_accept_privacy, get_current_privacy_version, update_user_privacy_acceptance
 from config import config
 from datetime import datetime
 from sqlalchemy import delete as sql_delete
@@ -301,12 +302,13 @@ async def cmd_start(message: types.Message):
 
     # Determine which keyboard to show
     reply_markup = None
+    needs_privacy_acceptance = user_needs_to_accept_privacy(user) if user else True
 
     if is_first_start:
         # First start: show language selection
         reply_markup = language_selection_keyboard(language).as_markup()
-    elif not user.privacy_accepted:
-        # Privacy not accepted: NO keyboard in welcome message
+    elif needs_privacy_acceptance:
+        # Privacy not accepted or old version: NO keyboard in welcome message
         # (privacy policy message below has the accept button)
         reply_markup = None
     else:
@@ -325,8 +327,8 @@ async def cmd_start(message: types.Message):
         reply_markup=reply_markup
     )
 
-    # Send privacy policy message immediately after /start
-    if not user.privacy_accepted:
+    # Send privacy policy message immediately after /start if needed
+    if needs_privacy_acceptance:
         privacy_text = (
             f"{i18n.t('common.privacy_policy', language)}\n\n"
             f"{i18n.t('common.privacy_policy_text.collect', language)}"
@@ -362,15 +364,15 @@ async def show_privacy_policy(callback: types.CallbackQuery):
         f"{i18n.t('common.privacy_policy_text.acception', language)}"
     )
 
-    # Check if user already accepted
+    # Check if user needs to accept (new user or old version)
     with get_session() as session:
         user = session.query(User).filter(User.telegram_id == callback.from_user.id).first()
-        already_accepted = user and user.privacy_accepted
+        needs_acceptance = user_needs_to_accept_privacy(user) if user else True
 
     # ✅ Simple back button
     builder = InlineKeyboardBuilder()
     
-    if not already_accepted:
+    if needs_acceptance:
         # Show accept button for users who haven't accepted
         builder.row(
             types.InlineKeyboardButton(
@@ -403,11 +405,11 @@ async def accept_privacy_policy(callback: types.CallbackQuery):
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     user_id = callback.from_user.id
 
-    # Update user's privacy acceptance status
+    # Update user's privacy acceptance status with current version
     with get_session() as session:
         user = session.query(User).filter(User.telegram_id == user_id).first()
         if user:
-            user.privacy_accepted = True
+            update_user_privacy_acceptance(user)
             session.commit()
 
     # Delete the privacy policy message

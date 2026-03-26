@@ -22,8 +22,10 @@ from bot.keyboards import (
     date_picker_keyboard,
     confirmation_keyboard,
     language_selection_keyboard,
-    privacy_policy_keyboard
+    privacy_policy_keyboard,
+    privacy_acceptance_keyboard
 )
+from bot.filters import PrivacyNotAcceptedFilter
 from db.models import get_session, User, Poster
 from db.crud import get_or_create_user, create_poster, get_user_stats
 from utils.helpers import format_preview_text, validate_caption, extract_forwarded_info
@@ -277,10 +279,10 @@ async def cmd_start(message: types.Message):
     with get_session() as session:
         user = session.query(User).filter(User.telegram_id == message.from_user.id).first()
         is_first_start = user is None
-        
+
         # Register user if not exists
         if is_first_start:
-            get_or_create_user(
+            user = get_or_create_user(
                 session,
                 telegram_id=message.from_user.id,
                 username=message.from_user.username,
@@ -297,30 +299,50 @@ async def cmd_start(message: types.Message):
     else:
         steps = steps_list
 
-    # Language selection hint (bilingual) - only show on first start
-    lang_hint = ""
+    # Determine which keyboard to show
     reply_markup = None
-    
+
     if is_first_start:
-        lang_hint = (
-            f"\n\n{t('common.language', language)}\n"
-            f"🇷🇺 Русский | 🇬🇧 English"
-        )
+        # First start: show language selection
         reply_markup = language_selection_keyboard(language).as_markup()
+    elif not user.privacy_accepted:
+        # Privacy not accepted: NO keyboard in welcome message
+        # (privacy policy message below has the accept button)
+        reply_markup = None
     else:
+        # Privacy accepted: show privacy policy button only
         reply_markup = privacy_policy_keyboard(language).as_markup()
 
+    # Send welcome message
     await message.answer(
         f"{t('commands.start.title', language)}\n\n"
         f"{t('commands.start.description', language)}\n\n"
         f"{t('commands.start.how_to', language)}\n"
         f"{steps}\n\n"
         f"{t('commands.start.footer', language)}\n\n"
-        f"{t('commands.start.auto_subscribe_note', language)}\n\n"
-        f"{t('commands.start.privacy_note', language)}",
+        f"{t('commands.start.auto_subscribe_note', language)}",
         parse_mode="HTML",
         reply_markup=reply_markup
     )
+
+    # Send privacy policy message immediately after /start
+    if not user.privacy_accepted:
+        privacy_text = (
+            f"{i18n.t('common.privacy_policy', language)}\n\n"
+            f"{i18n.t('common.privacy_policy_text.collect', language)}"
+            f"{i18n.t('common.privacy_policy_text.use', language)}"
+            f"{i18n.t('common.privacy_policy_text.storage', language)}"
+            f"{i18n.t('common.privacy_policy_text.rights', language)}"
+            f"{i18n.t('common.privacy_policy_text.mailing', language)}"
+            f"{i18n.t('common.privacy_policy_text.questions', language)}"
+            f"{i18n.t('common.privacy_policy_text.acception', language)}"
+        )
+
+        await message.answer(
+            privacy_text,
+            parse_mode="HTML",
+            reply_markup=privacy_acceptance_keyboard(language).as_markup()
+        )
 
 
 @commands_router.callback_query(F.data == "privacy:show")
@@ -339,13 +361,28 @@ async def show_privacy_policy(callback: types.CallbackQuery):
         f"{i18n.t('common.privacy_policy_text.questions', language)}"
         f"{i18n.t('common.privacy_policy_text.acception', language)}"
     )
-    
+
+    # Check if user already accepted
+    with get_session() as session:
+        user = session.query(User).filter(User.telegram_id == callback.from_user.id).first()
+        already_accepted = user and user.privacy_accepted
+
     # ✅ Simple back button
     builder = InlineKeyboardBuilder()
+    
+    if not already_accepted:
+        # Show accept button for users who haven't accepted
+        builder.row(
+            types.InlineKeyboardButton(
+                text=i18n.t('common.privacy_accept', language),
+                callback_data="privacy:accept"
+            )
+        )
+    
     builder.row(
         types.InlineKeyboardButton(text=i18n.t('common.back', language), callback_data="privacy:back")
     )
-    
+
     builder.row(
         types.InlineKeyboardButton(text=i18n.t('common.delete_data', language), callback_data="delete:confirm")
     )
@@ -355,7 +392,40 @@ async def show_privacy_policy(callback: types.CallbackQuery):
         parse_mode="HTML",
         reply_markup=builder.as_markup()
     )
-    
+
+    await callback.answer()
+
+
+@commands_router.callback_query(F.data == "privacy:accept")
+async def accept_privacy_policy(callback: types.CallbackQuery):
+    """Handle privacy policy acceptance"""
+
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
+    user_id = callback.from_user.id
+
+    # Update user's privacy acceptance status
+    with get_session() as session:
+        user = session.query(User).filter(User.telegram_id == user_id).first()
+        if user:
+            user.privacy_accepted = True
+            session.commit()
+
+    # Delete the privacy policy message
+    try:
+        await callback.message.delete()
+    except:
+        pass
+
+    # Send confirmation
+    await callback.message.answer(
+        f"{t('commands.start.title', language)}\n\n"
+        f"{t('commands.start.description', language)}\n\n"
+        f"{t('commands.start.how_to', language)}\n"
+        f"{t('commands.start.footer', language)}",
+        parse_mode="HTML",
+        reply_markup=privacy_policy_keyboard(language).as_markup()
+    )
+
     await callback.answer()
 
 

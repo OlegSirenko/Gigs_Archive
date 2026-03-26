@@ -17,7 +17,7 @@ class ModerationStatus(enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True)
     telegram_id = Column(Integer, unique=True, nullable=False, index=True)
     username = Column(String, nullable=True, index=True)
@@ -25,10 +25,11 @@ class User(Base):
     last_name = Column(String, nullable=True)
     language_code = Column(String, nullable=True)
     is_premium = Column(Boolean, default=False)
-    
+    privacy_accepted = Column(Boolean, default=False)  # User accepted privacy policy
+
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    
+
     subscribe_weekly = Column(Boolean, default=False)  # User wants Friday summary
 
     posters = relationship("Poster", back_populates="user", cascade="all, delete-orphan")

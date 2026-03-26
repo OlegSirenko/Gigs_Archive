@@ -122,6 +122,15 @@ def privacy_policy_keyboard(language: str):
     )
     return builder
 
+
+def privacy_acceptance_keyboard(language: str):
+    """Keyboard for users who haven't accepted privacy policy"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text=f"{i18n.t('common.privacy_accept', language)}", callback_data="privacy:accept")
+    )
+    return builder
+
 # =============================================================================
 # ============ MODERATOR KEYBOARDS (Moderation Flow) ==========================
 # =============================================================================

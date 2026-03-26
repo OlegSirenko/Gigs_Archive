@@ -5,6 +5,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, Update
 from db.models import get_session, User
 from utils.i18n import i18n, t
+from utils.privacy import user_needs_to_accept_privacy, get_current_privacy_version
 from bot.keyboards import privacy_acceptance_keyboard
 from config import config
 import logging
@@ -57,8 +58,8 @@ class PrivacyPolicyMiddleware(BaseMiddleware):
         with get_session() as session:
             user = session.query(User).filter(User.telegram_id == user_id).first()
 
-            # If user doesn't exist or hasn't accepted privacy policy
-            if not user or not user.privacy_accepted:
+            # If user doesn't exist or needs to accept privacy policy
+            if not user or user_needs_to_accept_privacy(user):
                 language = i18n.get_user_language(
                     getattr(real_event.from_user, 'language_code', None),
                     user_id

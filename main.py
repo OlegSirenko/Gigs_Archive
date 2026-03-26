@@ -15,6 +15,7 @@ from db.models import init_db
 from bot.handlers import commands_router, poster_router
 from bot.moderator_handlers import moderation_router, moderator_edit_router
 from bot.summary_handlers import summary_router
+from bot.middleware import PrivacyPolicyMiddleware
 from utils.scheduler import start_scheduler
 from utils.i18n import i18n, t
 
@@ -34,6 +35,10 @@ dp = Dispatcher()
 
 # Include all routers
 dp.include_routers(commands_router, summary_router, poster_router, moderation_router, moderator_edit_router)
+
+# Add privacy policy middleware to user-facing routers
+privacy_middleware = PrivacyPolicyMiddleware()
+dp.update.middleware(privacy_middleware)
 
 
 async def setup_bot_commands(bot: Bot):

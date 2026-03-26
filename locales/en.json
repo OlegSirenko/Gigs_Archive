@@ -26,7 +26,7 @@
       ],
       "footer": "All submissions are moderated before being published in the channel.\n\nUse /help for the list of commands.",
       "auto_subscribe_note": "✅ <i>You are automatically subscribed to the weekly Friday summary!</i>\n<i>To unsubscribe: /sub_off</i>",
-      "privacy_note": "🔐 <i>By using the bot, you agree to the privacy policy.</i>"
+      "privacy_note": "🔐 <i>Privacy policy acceptance is required to use the bot.</i>"
     },
     "help": {
       "title": "📚 <b>Available Commands</b>",
@@ -280,6 +280,7 @@
     "language_ru": "🇷🇺 Русский",
     "language_en": "🇬🇧 English",
     "privacy_policy":"🔐 Privacy Policy",
+    "privacy_accept": "✅ Accept Privacy Policy",
     "privacy_policy_text": {
       "collect":"📊 <b>We collect:</b>\n• Telegram ID, name, username\n• Poster content (photo, text, date)\n• Anonymity and mailing settings\n\n",
       "use":"🎯 <b>We use:</b>\n• For channel publication\n• For content moderation\n• For statistics and mailings\n\n",
@@ -287,7 +288,7 @@
       "rights": "✅ <b>Your rights:</b>\n• Access to data\n• Correction and deletion\n• Unsubscribe from mailing (/sub_off)\n\n",
       "mailing":"📬 <b>Mailing:</b>\n• Fridays at 14:30\n• Unsubscribe via /sub_off\n\n",
       "questions":"❓ <b>Questions:</b>\nt.me/GigsArchive?direct\n\n",
-      "acception":"<i>By using the bot, you agree to the policy.</i>"
+      "acception":"<i>To continue using the bot, you must accept the privacy policy.</i>"
     },
     "delete_data": "🗑️ Delete My Data",
     "delete_account": {

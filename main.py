@@ -20,9 +20,24 @@ from utils.scheduler import start_scheduler
 from utils.i18n import i18n, t
 
 # Setup logging
+import os
+from logging.handlers import RotatingFileHandler
+
+# Create logs directory if not exists
+os.makedirs("logs", exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),  # Console output
+        RotatingFileHandler(
+            "logs/bot.log",
+            maxBytes=10*1024*1024,  # 10 MB
+            backupCount=5,
+            encoding="utf-8"
+        )
+    ]
 )
 logger = logging.getLogger(__name__)
 

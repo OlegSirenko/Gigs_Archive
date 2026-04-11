@@ -25,7 +25,6 @@ from bot.keyboards import (
     privacy_policy_keyboard,
     privacy_acceptance_keyboard
 )
-from bot.filters import PrivacyNotAcceptedFilter
 from db.models import get_session, User, Poster
 from db.crud import get_or_create_user, create_poster, get_user_stats
 from utils.helpers import format_preview_text, validate_caption, extract_forwarded_info
@@ -304,7 +303,10 @@ async def cmd_start(message: types.Message):
         steps = steps_list
 
     # Determine subscription status text
-    if user and user.subscribe_weekly:
+    if is_first_start:
+        # New users are auto-subscribed, show auto-subscribe note
+        subscription_text = t('commands.start.auto_subscribe_note', language)
+    elif user and user.subscribe_weekly:
         subscription_text = t('commands.start.subscription_status_subscribed', language)
     else:
         subscription_text = t('commands.start.subscription_status_unsubscribed', language)
@@ -410,10 +412,13 @@ async def accept_privacy_policy(callback: types.CallbackQuery):
         update_user_privacy_acceptance(user)
         session.commit()
 
-        # Check if user was just created (first start)
-        is_new_user = user.created_at and (user.created_at == user.updated_at or user.language_code is None)
+        # Check if user was just created (within last 2 minutes = first start)
+        is_new_user = False
+        if user and user.created_at:
+            time_since_creation = datetime.now() - user.created_at
+            is_new_user = time_since_creation.total_seconds() < 120
 
-    # Answer callback FIRST
+    # Answer callback FIRST to stop button loading animation
     await callback.answer()
 
     # Delete the privacy policy message
@@ -481,7 +486,7 @@ async def delete_back(callback: types.CallbackQuery):
     await callback.answer()
 
 @commands_router.callback_query(F.data.startswith("delete:execute:"))
-async def execute_delete_account(callback: types.CallbackQuery):
+async def execute_delete_account(callback: types.CallbackQuery, state: FSMContext):
     """Execute account deletion"""
 
     user_id = int(callback.data.split(":")[2])
@@ -499,6 +504,9 @@ async def execute_delete_account(callback: types.CallbackQuery):
         # Answer callback FIRST to stop button loading animation
         await callback.answer()
 
+        # Clear FSM state before deleting user data
+        await state.clear()
+
         with get_session() as session:
             # ✅ Delete user's posters first (foreign key constraint)
             session.execute(
@@ -515,7 +523,7 @@ async def execute_delete_account(callback: types.CallbackQuery):
         # Delete confirmation message before showing success
         try:
             await callback.message.delete()
-        except:
+        except Exception:
             pass
 
         # ✅ Show success message
@@ -533,7 +541,7 @@ async def execute_delete_account(callback: types.CallbackQuery):
         # Delete confirmation message before showing error
         try:
             await callback.message.delete()
-        except:
+        except Exception:
             pass
 
         await callback.message.answer(

@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(set *)",
-      "Bash(.venv\\scripts\\python.exe *)"
+      "Bash(.venv\\scripts\\python.exe *)",
+      "WebFetch(pravo.by)",
+      "WebSearch",
+      "WebFetch(etalonline.by)",
+      "WebFetch(openini.by)"
     ]
   },
   "$version": 3

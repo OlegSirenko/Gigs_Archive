@@ -144,7 +144,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
+/.qwen/
 # Spyder project settings
 .spyderproject
 .spyproject

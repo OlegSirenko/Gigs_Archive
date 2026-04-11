@@ -287,10 +287,10 @@
       "collect":"📊 <b>We collect:</b>\n• Telegram ID, name, username\n• Poster content (photo, text, date)\n• Anonymity and mailing settings\n\n",
       "use":"🎯 <b>We use:</b>\n• For channel publication\n• For content moderation\n• For statistics and mailings\n\n",
       "storage":"🔒 <b>We store:</b>\n• Locally in Belarus\n• Access only for developer\n• Backups for 7 days\n\n",
-      "rights": "✅ <b>Your rights:</b>\n• Access to data\n• Correction and deletion\n• Unsubscribe from mailing (/sub_off)\n\n",
+      "rights": "✅ <b>Your rights (Law No. 99-Z):</b>\n• Access to data (5 days)\n• Correction and deletion (15 days)\n• Consent withdrawal\n• Unsubscribe from mailing (/sub_off)\n\n",
       "mailing":"📬 <b>Mailing:</b>\n• Fridays at 14:30\n• Unsubscribe via /sub_off\n\n",
       "questions":"❓ <b>Questions:</b>\nt.me/GigsArchive?direct\n\n",
-      "acception":"<i>To continue using the bot, you must accept the privacy policy.</i>"
+      "acception":"<i>To continue using the bot, you must accept the privacy policy. Data processing is carried out in accordance with the Law of the Republic of Belarus 'On Personal Data Protection'.</i>"
     },
     "delete_data": "🗑️ Delete My Data",
     "delete_account": {

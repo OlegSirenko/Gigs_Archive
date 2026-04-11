@@ -26,7 +26,9 @@
       ],
       "footer": "All submissions are moderated before being published in the channel.\n\nUse /help for the list of commands.",
       "auto_subscribe_note": "✅ <i>You are automatically subscribed to the weekly Friday summary!</i>\n<i>To unsubscribe: /sub_off</i>",
-      "privacy_note": "🔐 <i>Privacy policy acceptance is required to use the bot.</i>"
+      "privacy_note": "🔐 <i>Privacy policy acceptance is required to use the bot.</i>",
+      "subscription_status_subscribed": "📬 <i>You are subscribed to the weekly Friday summary. To unsubscribe: /sub_off</i>",
+      "subscription_status_unsubscribed": "📭 <i>You are unsubscribed from the weekly summary. To subscribe: /sub_on</i>"
     },
     "help": {
       "title": "📚 <b>Available Commands</b>",

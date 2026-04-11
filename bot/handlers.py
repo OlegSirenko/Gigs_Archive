@@ -294,40 +294,39 @@ async def cmd_start(message: types.Message):
                 subscribe_weekly=True  # Auto-subscribe new users to weekly digest
             )
 
+    needs_privacy_acceptance = user_needs_to_accept_privacy(user) if user else True
+
+    # Always send welcome message first
     steps_list = i18n.t('commands.start.steps', language)
     if isinstance(steps_list, list):
         steps = "\n".join([f"{i}. {step}" for i, step in enumerate(steps_list, 1)])
     else:
         steps = steps_list
 
-    # Determine which keyboard to show
-    reply_markup = None
-    needs_privacy_acceptance = user_needs_to_accept_privacy(user) if user else True
-
-    if is_first_start:
-        # First start: show language selection
-        reply_markup = language_selection_keyboard(language).as_markup()
-    elif needs_privacy_acceptance:
-        # Privacy not accepted or old version: NO keyboard in welcome message
-        # (privacy policy message below has the accept button)
-        reply_markup = None
+    # Determine subscription status text
+    if user and user.subscribe_weekly:
+        subscription_text = t('commands.start.subscription_status_subscribed', language)
     else:
-        # Privacy accepted: show privacy policy button only
+        subscription_text = t('commands.start.subscription_status_unsubscribed', language)
+
+    # Welcome message keyboard
+    if needs_privacy_acceptance:
+        reply_markup = None  # Privacy policy message below has accept button
+    else:
         reply_markup = privacy_policy_keyboard(language).as_markup()
 
-    # Send welcome message
     await message.answer(
         f"{t('commands.start.title', language)}\n\n"
         f"{t('commands.start.description', language)}\n\n"
         f"{t('commands.start.how_to', language)}\n"
         f"{steps}\n\n"
-        f"{t('commands.start.footer', language)}\n\n"
-        f"{t('commands.start.auto_subscribe_note', language)}",
+        f"{subscription_text}\n\n"
+        f"{t('commands.start.footer', language)}",
         parse_mode="HTML",
         reply_markup=reply_markup
     )
 
-    # Send privacy policy message immediately after /start if needed
+    # If privacy needs acceptance, send it after welcome message
     if needs_privacy_acceptance:
         privacy_text = (
             f"{i18n.t('common.privacy_policy', language)}\n\n"
@@ -405,12 +404,17 @@ async def accept_privacy_policy(callback: types.CallbackQuery):
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     user_id = callback.from_user.id
 
-    # Update user's privacy acceptance status with current version
+    # Check if user is new (needs language selection)
     with get_session() as session:
         user = session.query(User).filter(User.telegram_id == user_id).first()
-        if user:
-            update_user_privacy_acceptance(user)
-            session.commit()
+        update_user_privacy_acceptance(user)
+        session.commit()
+
+        # Check if user was just created (first start)
+        is_new_user = user.created_at and (user.created_at == user.updated_at or user.language_code is None)
+
+    # Answer callback FIRST
+    await callback.answer()
 
     # Delete the privacy policy message
     try:
@@ -418,26 +422,23 @@ async def accept_privacy_policy(callback: types.CallbackQuery):
     except:
         pass
 
-    # Send confirmation
-    await callback.message.answer(
-        f"{t('commands.start.title', language)}\n\n"
-        f"{t('commands.start.description', language)}\n\n"
-        f"{t('commands.start.how_to', language)}\n"
-        f"{t('commands.start.footer', language)}",
-        parse_mode="HTML",
-        reply_markup=privacy_policy_keyboard(language).as_markup()
-    )
-
-    await callback.answer()
+    # If new user - show language selection
+    # Welcome message is already at the top of the chat
+    if is_new_user:
+        await callback.message.answer(
+            f"🌐 {t('common.language', language)}\n\n"
+            f"🇷🇺 Русский | 🇬🇧 English",
+            reply_markup=language_selection_keyboard(language).as_markup()
+        )
 
 
 @commands_router.callback_query(F.data == "delete:confirm")
 async def confirm_delete_account(callback: types.CallbackQuery):
     """Show delete confirmation dialog"""
-    
+
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     user_id = callback.from_user.id
-    
+
     builder = InlineKeyboardBuilder()
     builder.row(
         types.InlineKeyboardButton(
@@ -449,7 +450,13 @@ async def confirm_delete_account(callback: types.CallbackQuery):
             callback_data="delete:cancel"
         )
     )
-    
+
+    # Delete the privacy policy message before showing confirmation
+    try:
+        await callback.message.delete()
+    except:
+        pass
+
     await callback.message.answer(
         f"{i18n.t('common.delete_account.warning', language)}\n\n"
         f"{i18n.t('common.delete_account.confirm_text', language)}\n\n"
@@ -457,7 +464,7 @@ async def confirm_delete_account(callback: types.CallbackQuery):
         parse_mode="HTML",
         reply_markup=builder.as_markup()
     )
-    
+
     await callback.answer()
 
 
@@ -476,10 +483,10 @@ async def delete_back(callback: types.CallbackQuery):
 @commands_router.callback_query(F.data.startswith("delete:execute:"))
 async def execute_delete_account(callback: types.CallbackQuery):
     """Execute account deletion"""
-    
+
     user_id = int(callback.data.split(":")[2])
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
-    
+
     # ✅ Verify it's the same user
     if user_id != callback.from_user.id:
         await callback.answer(
@@ -487,40 +494,52 @@ async def execute_delete_account(callback: types.CallbackQuery):
             show_alert=True
         )
         return
-    
+
     try:
+        # Answer callback FIRST to stop button loading animation
+        await callback.answer()
+
         with get_session() as session:
             # ✅ Delete user's posters first (foreign key constraint)
             session.execute(
                 sql_delete(Poster).where(Poster.user_id == user_id)
             )
-            
+
             # ✅ Delete user
             session.execute(
                 sql_delete(User).where(User.telegram_id == user_id)
             )
-            
+
             session.commit()
-        
-        # ✅ Update message to show success
+
+        # Delete confirmation message before showing success
+        try:
+            await callback.message.delete()
+        except:
+            pass
+
+        # ✅ Show success message
         await callback.message.answer(
             f"{i18n.t('common.delete_account.success_title', language)}\n\n"
             f"{i18n.t('common.delete_account.success_text', language)}",
             parse_mode="HTML"
         )
-        
-        await callback.answer()
+
         logger.info(f"✅ User {user_id} deleted their account")
-        
+
     except Exception as e:
         logger.error(f"❌ Error deleting user {user_id}: {e}")
-        
+
+        # Delete confirmation message before showing error
+        try:
+            await callback.message.delete()
+        except:
+            pass
+
         await callback.message.answer(
             i18n.t('common.delete_account.error', language),
             parse_mode="HTML"
         )
-        
-        await callback.answer()
 
 
 

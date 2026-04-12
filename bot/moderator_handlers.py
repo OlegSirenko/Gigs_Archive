@@ -484,7 +484,7 @@ async def skip_description(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer()
 
 
-@moderator_edit_router.message(F.text, F.from_user.id.in_(config.admin_ids))
+@moderator_edit_router.message(ModeratorEdit.waiting_for_description, F.text, F.from_user.id.in_(config.admin_ids))
 async def process_moderator_description(message: types.Message, state: FSMContext):
     """Handle moderator typing description - EDIT the stored instruction message"""
     

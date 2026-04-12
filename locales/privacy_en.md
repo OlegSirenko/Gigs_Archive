@@ -23,13 +23,17 @@
 
 ## 2. Terms and Definitions
 
-2.1. **Personal Data** — any information relating to an identified natural person or a natural person who can be identified.
+This Policy uses terms defined in Art. 1 of the Law of the Republic of Belarus dated 07.05.2021 No. 99-Z "On Personal Data Protection":
 
-2.2. **Processing of Personal Data** — any action performed with personal data, including collection, systematization, storage, refinement, use, depersonalization, blocking, deletion.
+2.1. **Personal Data** — any information relating to the data subject and (or) a member of his or her family, on the basis of which the data subject and (or) a member of his or her family can be identified.
+
+2.2. **Processing of Personal Data** — actions aimed at obtaining, using, storing, systematizing, blocking, depersonalizing, distributing (providing, publishing) and (or) making available to third parties, deleting personal data.
 
 2.3. **Data Subject** — a natural person in relation to whom personal data is processed (Bot user).
 
-2.4. **Subject's Consent** — a free, unambiguous, informed expression of will of the data subject.
+2.4. **Consent of the Data Subject** — a free, unambiguous, informed expression of will of the data subject, expressing permission to process his or her personal data.
+
+2.5. **Personal Data Operator** — a legal entity or natural person organizing and (or) carrying out processing of personal data.
 
 ---
 
@@ -101,7 +105,7 @@
 
 5.3. After consent withdrawal or account deletion, personal data shall be destroyed within **15 working days** (Art. 10, para. 2 of Law No. 99-Z).
 
-5.4. Posters published in the Bot's channel are **not deleted automatically**. To remove publications, a request must be sent to the Operator.
+5.4. Personal data contained in posters published in the Bot's channel is deleted from the Operator's database in accordance with para. 5.3. However, such posters may remain visible in the Bot's channel (a public resource) until deleted by the channel administrator. To remove publications from the channel, a separate request must be sent to the Operator.
 
 ---
 
@@ -145,9 +149,9 @@ In accordance with Chapter 3 of Law No. 99-Z, you have the right to:
 | **Obtain information** about processing of your data | Request via Telegram or email | 5 working days (Art. 11, para. 2) |
 | **Obtain your data** in machine-readable format | Request via Telegram or email | 15 days |
 | **Request correction** of inaccurate data | Request via Telegram or email | 15 days (Art. 10, para. 2) |
-| **Request deletion** of your data | Deletion command in Bot or request | 15 days |
+| **Request deletion** of your data | Request via Bot interface (inline buttons) or request to Operator | 15 days |
 | **Withdraw consent** for processing | Stop using the Bot or send a request | 15 days |
-| **Complain about** the Operator's actions | Apply to the authorized body for data subject rights protection | — |
+| **Complain about** the Operator's actions | Apply to the authorized body for data subject rights protection | during the consent period and after its withdrawal, if the Operator's actions (or inaction) have caused or could have caused a violation of the data subject's rights or contradict the requirements of legislation |
 
 8.1. Requests are sent to the Operator at the contact details specified in Section 11 of this Policy.
 
@@ -201,11 +205,24 @@ For all questions related to personal data processing:
 
 12.1. The Operator has the right to make changes to this Policy.
 
-12.2. The new version of the Policy enters into force from the moment of its publication.
+12.2. A new version of the Policy that does not constitute a significant change enters into force from the moment of its publication.
 
-12.3. For significant changes, users will be notified through the Bot.
+12.3. **Significant changes** include changes related to:
+- expansion of the list of processed personal data;
+- change in the purposes of personal data processing;
+- change in the methods or conditions of data processing;
+- change in the procedure for using personal data;
+- change in the list of third parties to whom data may be transferred.
 
-12.4. The current version of the Policy is always available via the `/privacy` command in the Bot.
+12.4. In the event of significant changes, the Operator is obliged to:
+- notify users through the Bot before the changes take effect;
+- request **new consent** from the data subject to the processing of personal data in the amended scope;
+- specify the scope in which data will be used, where, and for what purposes;
+- provide the user with the opportunity to **withdraw consent** before the changes take effect.
+
+12.5. If the user has not given new consent to the processing of personal data in the amended scope, the Operator ceases processing personal data in the previous scope, unless the previous processing can be carried out on another legal basis.
+
+12.6. The current version of the Policy is available at any time by pressing the "Privacy Policy" button in the Bot interface (button available after accepting the Policy).
 
 ---
 

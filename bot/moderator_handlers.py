@@ -39,6 +39,59 @@ logger = logging.getLogger(__name__)
 moderation_router = Router(name="moderation")         # Moderation chat handlers
 moderator_edit_router = Router(name="moderator_edit") # Moderator DM handlers
 
+
+async def safe_edit_moderation_message(message, status_text: str, language: str):
+    """
+    Safely edit moderation message, handling InaccessibleMessage after group migration.
+    Returns True if edit succeeded, False if message was inaccessible.
+    """
+    try:
+        if message.photo:
+            await message.edit_caption(
+                caption=(message.caption or "") + status_text,
+                parse_mode="HTML",
+                reply_markup=None
+            )
+        else:
+            await message.edit_text(
+                text=(message.text or "") + status_text,
+                parse_mode="HTML",
+                reply_markup=None
+            )
+        return True
+    except Exception as e:
+        # Message is inaccessible (e.g., group migrated to supergroup)
+        logger.warning(f"Could not edit moderation message (likely migrated): {e}")
+        # Send status as a new message instead
+        try:
+            await message.bot.send_message(
+                chat_id=message.chat.id,
+                text=status_text.replace("\n\n━━━━━━━━━━━━━━━━━━━━", ""),
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass  # If even this fails, just log and continue
+        return False
+
+
+async def safe_edit_keyboard(message, keyboard):
+    """Safely edit keyboard on moderation message, handling InaccessibleMessage."""
+    try:
+        if message.photo:
+            await message.edit_caption(
+                caption=message.caption or "📝 Poster Submission",
+                reply_markup=keyboard.as_markup()
+            )
+        else:
+            await message.edit_text(
+                text=message.text or "📝 Poster Submission",
+                reply_markup=keyboard.as_markup()
+            )
+        return True
+    except Exception as e:
+        logger.warning(f"Could not edit keyboard (likely migrated): {e}")
+        return False
+
 # =============================================================================
 # ============ MODERATION CHAT HANDLERS =======================================
 # =============================================================================
@@ -135,34 +188,20 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                         f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
                         f"<i>{t('moderation.status.pending_final_hint', language)}</i>"
                     )
-                    
-                    if callback.message.photo:
-                        await callback.message.edit_caption(
-                            caption=(callback.message.caption or "") + status_text,
-                            parse_mode="HTML",
-                            reply_markup=None
-                        )
-                    else:
-                        await callback.message.edit_text(
-                            text=(callback.message.text or "") + status_text,
-                            parse_mode="HTML",
-                            reply_markup=None
-                        )
+
+                    await safe_edit_moderation_message(callback.message, status_text, language)
                     
                     await callback.answer(t("moderation.action.sent_to_dm", language), show_alert=False)
 
             elif action == "decline":
                 # Show decline reason keyboard (stateless)
-                keyboard = decline_reason_keyboard(user_id, anon_flag, poster_id, language)  # ← ADDED language param
+                keyboard = decline_reason_keyboard(user_id, anon_flag, poster_id, language)
 
-                if callback.message.photo:
-                    await callback.message.edit_caption(
-                        caption=callback.message.caption or "📝 Poster Submission",
-                        reply_markup=keyboard.as_markup()
-                    )
-                else:
-                    await callback.message.edit_text(
-                        text=callback.message.caption or "📝 Poster Submission",
+                if not await safe_edit_keyboard(callback.message, keyboard):
+                    # If message is inaccessible, send decline as new message
+                    await callback.bot.send_message(
+                        chat_id=callback.message.chat.id,
+                        text=t("moderation.action.decline_selected", language),
                         reply_markup=keyboard.as_markup()
                     )
 
@@ -240,19 +279,8 @@ async def handle_decline_reason(callback: types.CallbackQuery):
                 f"📋 Reason: {reason_code}\n"
                 f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
             )
-            
-            if callback.message.photo:
-                await callback.message.edit_caption(
-                    caption=(callback.message.caption or "") + status_text,
-                    parse_mode="HTML",
-                    reply_markup=None
-                )
-            else:
-                await callback.message.edit_text(
-                    text=(callback.message.text or "") + status_text,
-                    parse_mode="HTML",
-                    reply_markup=None
-                )
+
+            await safe_edit_moderation_message(callback.message, status_text, language)
             
             await callback.answer(t("moderation.action.poster_declined", language), show_alert=False)
             logger.info(f"Poster {poster_id} declined by @{moderator_username} - Reason: {reason_code}")
@@ -295,13 +323,11 @@ async def cancel_decline(callback: types.CallbackQuery):
                 user_id=poster.user_id,
                 is_anonymous=poster.is_anonymous,
                 poster_id=poster.id,
-                language=language  # ← ADDED language param
+                language=language
             ).as_markup()
 
             # Get original caption (remove any status text)
             original_caption = callback.message.caption or "📝 Poster Submission"
-
-            # Remove any status text that might have been added
             clean_caption = re.sub(
                 r"\n\n━━━━━━━━━━━━━━━━━━━━.*",
                 "",
@@ -309,17 +335,22 @@ async def cancel_decline(callback: types.CallbackQuery):
                 flags=re.DOTALL
             )
 
-            # Edit message based on type (photo or text)
-            if callback.message.photo:
-                await callback.message.edit_caption(
-                    caption=clean_caption,
-                    reply_markup=keyboard
-                )
-            else:
-                await callback.message.edit_text(
-                    text=clean_caption,
-                    reply_markup=keyboard
-                )
+            # Edit message — handle InaccessibleMessage gracefully
+            try:
+                if callback.message.photo:
+                    await callback.message.edit_caption(
+                        caption=clean_caption,
+                        reply_markup=keyboard
+                    )
+                else:
+                    await callback.message.edit_text(
+                        text=clean_caption,
+                        reply_markup=keyboard
+                    )
+            except Exception as msg_error:
+                logger.warning(f"Could not restore keyboard (likely migrated): {msg_error}")
+                await callback.answer(t("moderation.action.decline_cancelled", language) + " (message inaccessible)", show_alert=True)
+                return
 
         await callback.answer(t("moderation.action.decline_cancelled", language), show_alert=True)  # ← CHANGED
         logger.info(f"Decline cancelled for poster {poster_id}")

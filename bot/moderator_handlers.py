@@ -40,7 +40,7 @@ moderation_router = Router(name="moderation")         # Moderation chat handlers
 moderator_edit_router = Router(name="moderator_edit") # Moderator DM handlers
 
 
-async def safe_edit_moderation_message(message, status_text: str, language: str):
+async def safe_edit_moderation_message(bot, chat_id: int, message, status_text: str):
     """
     Safely edit moderation message, handling InaccessibleMessage after group migration.
     Returns True if edit succeeded, False if message was inaccessible.
@@ -62,10 +62,10 @@ async def safe_edit_moderation_message(message, status_text: str, language: str)
     except Exception as e:
         # Message is inaccessible (e.g., group migrated to supergroup)
         logger.warning(f"Could not edit moderation message (likely migrated): {e}")
-        # Send status as a new message instead
+        # Send status as a new message using bot object (not message.bot which may not exist)
         try:
-            await message.bot.send_message(
-                chat_id=message.chat.id,
+            await bot.send_message(
+                chat_id=chat_id,
                 text=status_text.replace("\n\n━━━━━━━━━━━━━━━━━━━━", ""),
                 parse_mode="HTML"
             )
@@ -74,7 +74,7 @@ async def safe_edit_moderation_message(message, status_text: str, language: str)
         return False
 
 
-async def safe_edit_keyboard(message, keyboard):
+async def safe_edit_keyboard(bot, chat_id: int, message, keyboard):
     """Safely edit keyboard on moderation message, handling InaccessibleMessage."""
     try:
         if message.photo:
@@ -90,6 +90,15 @@ async def safe_edit_keyboard(message, keyboard):
         return True
     except Exception as e:
         logger.warning(f"Could not edit keyboard (likely migrated): {e}")
+        # Send as new message with keyboard
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="📝 Poster Submission",
+                reply_markup=keyboard.as_markup()
+            )
+        except Exception:
+            pass
         return False
 
 # =============================================================================
@@ -189,7 +198,7 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                         f"<i>{t('moderation.status.pending_final_hint', language)}</i>"
                     )
 
-                    await safe_edit_moderation_message(callback.message, status_text, language)
+                    await safe_edit_moderation_message(callback.bot, callback.message.chat.id, callback.message, status_text, language)
                     
                     await callback.answer(t("moderation.action.sent_to_dm", language), show_alert=False)
 
@@ -197,7 +206,7 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                 # Show decline reason keyboard (stateless)
                 keyboard = decline_reason_keyboard(user_id, anon_flag, poster_id, language)
 
-                if not await safe_edit_keyboard(callback.message, keyboard):
+                if not await safe_edit_keyboard(callback.bot, callback.message.chat.id, callback.message, keyboard):
                     # If message is inaccessible, send decline as new message
                     await callback.bot.send_message(
                         chat_id=callback.message.chat.id,
@@ -280,7 +289,7 @@ async def handle_decline_reason(callback: types.CallbackQuery):
                 f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
             )
 
-            await safe_edit_moderation_message(callback.message, status_text, language)
+            await safe_edit_moderation_message(callback.bot, callback.message.chat.id, callback.message, status_text, language)
             
             await callback.answer(t("moderation.action.poster_declined", language), show_alert=False)
             logger.info(f"Poster {poster_id} declined by @{moderator_username} - Reason: {reason_code}")

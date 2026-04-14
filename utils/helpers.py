@@ -10,14 +10,28 @@ from utils.i18n import i18n, t
 
 
 def has_valid_link(text: str) -> bool:
-    """Check if text contains at least one valid URL/link"""
+    """
+    Check if text contains at least one valid URL/link.
+    Handles plain URLs, HTML-encoded URLs, and href attributes.
+    """
     if not text:
         return False
     
-    # Simple but effective: matches domain.tld with optional protocol/www/path
+    # ✅ Step 1: Decode HTML entities (&amp; → &, &lt; → <, etc.)
+    # This ensures encoded URLs are detectable
+    decoded = html.unescape(text)
+    
+    # ✅ Step 2: Check for URLs inside href attributes (HTML-formatted links)
+    # Matches: href="https://...", href='https://...', href=https://...
+    href_pattern = r'href\s*=\s*["\']?((?:https?://)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}[^\s<>"\']*)'
+    if re.search(href_pattern, decoded, re.IGNORECASE):
+        return True
+    
+    # ✅ Step 3: Your original pattern (now runs on decoded text)
+    # Matches: https://example.com, example.com/path, t.me/user, etc.
     url_pattern = r'((?:https?://)?(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?|t\.me/[^\s]+|telegram\.me/[^\s]+)'
     
-    return bool(re.search(url_pattern, text, re.IGNORECASE))
+    return bool(re.search(url_pattern, decoded, re.IGNORECASE))
 
 
 def format_date(d: date | datetime) -> str:

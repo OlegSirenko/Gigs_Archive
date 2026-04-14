@@ -553,8 +553,6 @@ async def execute_delete_account(callback: types.CallbackQuery, state: FSMContex
         )
 
 
-
-
 @commands_router.callback_query(F.data == "privacy:back")
 async def privacy_back(callback: types.CallbackQuery):
     """Go back from privacy policy"""

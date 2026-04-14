@@ -165,7 +165,10 @@
       "cancel_returned": "{operation_cancelled}\n\nPoster #{poster_id} returned to moderation queue.",
       "sent_to_dm": "✅ Sent to DM for finalization!",
       "poster_declined": "❌ Poster declined!",
-      "already_processed": "⚠️ This poster has already been processed by another moderator",
+      "already_processed": "⚠️ This poster has already been processed",
+      "already_in_progress": "⏳ This poster is already being finalized by another moderator",
+      "already_approved": "✅ This poster has already been approved and published",
+      "already_declined": "❌ This poster has already been declined",
       "test_mode_caption": "\n\n⚠️ <i>TEST MODE — not a real publication</i>",
       "published_channel": "🔗 Published: {channel_link}",
       "poster_published": "✅ <b>Poster #{poster_id} published!</b>"

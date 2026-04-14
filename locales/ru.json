@@ -165,7 +165,10 @@
       "cancel_returned": "{operation_cancelled}\n\nАфиша #{poster_id} возвращена в очередь модерации.",
       "sent_to_dm": "✅ Отправлено в ЛС для финализации!",
       "poster_declined": "❌ Афиша отклонена!",
-      "already_processed": "⚠️ Эта афиша уже обработана другим модератором",
+      "already_processed": "⚠️ Эта афиша уже обработана",
+      "already_in_progress": "⏳ Эта афиша уже в процессе финализации другим модератором",
+      "already_approved": "✅ Эта афиша уже одобрена и опубликована",
+      "already_declined": "❌ Эта афиша уже отклонена",
       "test_mode_caption": "\n\n⚠️ <i>ТЕСТОВЫЙ РЕЖИМ — не реальная публикация</i>",
       "published_channel": "🔗 Опубликовано: {channel_link}",
       "poster_published": "✅ <b>Афиша #{poster_id} опубликована!</b>"

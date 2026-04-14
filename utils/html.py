@@ -7,18 +7,17 @@ from aiogram.types import Message
 def get_html_caption(message: Message) -> str:
     """
     Get message caption with HTML formatting preserved.
-    
-    In aiogram 3.x, we use HtmlDecoration.unparse(text, entities)
+
+    In aiogram 3.x, we use HtmlDecoration.unparse(text, caption_entities)
     to convert caption + caption_entities to HTML.
-    
-    Usage:
-        caption = get_html_caption(message)  # Returns formatted HTML or plain text
+
+    Works for: photos, videos, documents, audio with captions.
     """
     if message.caption:
         from aiogram.utils.text_decorations import HtmlDecoration
         html_decoration = HtmlDecoration()
         return html_decoration.unparse(message.caption, message.caption_entities)
-    
+
     # Fallback to empty string if no caption
     return ""
 
@@ -26,7 +25,15 @@ def get_html_caption(message: Message) -> str:
 def get_html_text(message: Message) -> str:
     """
     Get message text with HTML formatting preserved.
-    Uses message.html_text which is built into aiogram 3.x
+    
+    Works for: regular text messages, forwarded messages, replies.
+    Uses HtmlDecoration.unparse(text, entities) for consistent HTML extraction.
     """
-    return message.html_text if message.html_text else (message.text or "")
+    if message.text:
+        from aiogram.utils.text_decorations import HtmlDecoration
+        html_decoration = HtmlDecoration()
+        return html_decoration.unparse(message.text, message.entities)
+    
+    # Fallback to empty string if no text
+    return ""
 

@@ -300,13 +300,15 @@ def extract_forwarded_info(message: Message) -> dict:
             # ✅ Channel forward
             info['is_channel_forward'] = True
     
-    # Get message content — use html_text for text messages
+    # Get message content — use HTML helpers to preserve formatting
     from utils.html import get_html_caption, get_html_text
-    
-    text = get_html_text(message) if message.text else (message.caption or "")
 
-    if text:
-        info['caption'] = text
+    if message.text:
+        # Text message with possible HTML entities
+        info['caption'] = get_html_text(message)
+    elif message.caption:
+        # Photo/video/document with caption - preserve HTML
+        info['caption'] = get_html_caption(message)
 
     if message.photo:
         info['photo_file_id'] = message.photo[-1].file_id
@@ -324,7 +326,7 @@ def extract_forwarded_info(message: Message) -> dict:
             info['photo_file_id'] = message.document.thumbnails[-1].file_id
         if not info['caption']:
             info['caption'] = get_html_caption(message)
-    
+
     return info
 
 

@@ -2,6 +2,7 @@
 """Helper functions for formatting and text processing"""
 import re
 import json
+import html
 from aiogram.types import Message, MessageOriginUser, MessageOriginChat, MessageOriginHiddenUser, MessageOriginChannel
 from datetime import datetime, date
 from typing import Optional, Dict
@@ -65,9 +66,15 @@ def format_preview_text(data: dict) -> str:
     caption = data.get('caption', '')
     if not caption:
         caption = t('poster_flow.preview.no_description', language)
-    if len(caption) > 100:
-        caption = caption[:100] + '...'
-    preview += f"\n{t('poster_flow.preview.description_label', language)}\n<code>{caption}</code>\n"
+    
+    # Escape HTML inside <code> block to prevent parsing errors
+    # (forwarded messages may contain HTML like <a href="...">)
+    caption_for_code = html.escape(caption)
+    
+    if len(caption_for_code) > 100:
+        caption_for_code = caption_for_code[:100] + '...'
+    
+    preview += f"\n{t('poster_flow.preview.description_label', language)}\n<code>{caption_for_code}</code>\n"
 
     # Event date - ✅ Convert string to date object
     event_date_str = data.get('event_date')

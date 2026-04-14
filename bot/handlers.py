@@ -5,6 +5,7 @@ NO moderation logic here!
 """
 import asyncio
 import re
+import html
 import logging
 import json
 from aiogram import Router, F, types
@@ -1164,18 +1165,23 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
 async def edit_submission(callback: types.CallbackQuery, state: FSMContext):
     """Return to photo step for editing"""
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
-    
+
     await state.set_state(PosterSubmission.waiting_for_photo)
-    
+
     data = await state.get_data()
     
+    # Escape HTML inside <code> block to prevent parsing errors
+    raw_caption = data.get('caption', 'None')
+    escaped_caption = html.escape(raw_caption)
+    caption_preview = escaped_caption[:100] + ('...' if len(raw_caption) > 100 else '')
+
     await safe_edit_text(
         callback.message,
         text=(
             f"{t('poster_flow.edit.title', language)}\n\n"
             f"{t('poster_flow.edit.description', language)}\n\n"
             f"{t('poster_flow.edit.previous_caption', language)}\n"
-            f"<code>{data.get('caption', 'None')[:100]}{'...' if len(data.get('caption', '')) > 100 else ''}</code>"
+            f"<code>{caption_preview}</code>"
         ),
         reply_markup=cancel_keyboard(language).as_markup()
     )

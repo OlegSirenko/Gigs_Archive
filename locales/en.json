@@ -165,6 +165,7 @@
       "cancel_returned": "{operation_cancelled}\n\nPoster #{poster_id} returned to moderation queue.",
       "sent_to_dm": "✅ Sent to DM for finalization!",
       "poster_declined": "❌ Poster declined!",
+      "already_processed": "⚠️ This poster has already been processed by another moderator",
       "test_mode_caption": "\n\n⚠️ <i>TEST MODE — not a real publication</i>",
       "published_channel": "🔗 Published: {channel_link}",
       "poster_published": "✅ <b>Poster #{poster_id} published!</b>"
@@ -232,6 +233,10 @@
       "approved": "✅ Approved",
       "declined": "❌ Declined",
       "pending_final": "⏳ Awaiting finalization"
+    },
+    "start_editing": {
+      "title": "✏️ <b>Ready to edit?</b>",
+      "description": "Send the final text for this publication.\n\n💡 <i>You can use HTML formatting</i>"
     },
     "moderation_finalize": {
       "title": "✏️ <b>Create Final Description</b>\n\n",
@@ -334,6 +339,7 @@
     },
     "moderator": {
       "skip": "⏭️ Skip — use original",
+      "start_editing": "✏️ Start Editing",
       "publish": "✅ Publish to channel",
       "edit_again": "✏️ Edit again"
     },

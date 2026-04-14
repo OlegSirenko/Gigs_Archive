@@ -6,7 +6,8 @@
       "WebFetch(pravo.by)",
       "WebSearch",
       "WebFetch(etalonline.by)",
-      "WebFetch(openini.by)"
+      "WebFetch(openini.by)",
+      "Bash(python *)"
     ]
   },
   "$version": 3

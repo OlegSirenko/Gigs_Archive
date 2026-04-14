@@ -592,9 +592,15 @@ async def process_moderator_description(message: types.Message, state: FSMContex
     moderator_id = message.from_user.id
 
     # ✅ Get caption with HTML formatting if available
-    # message.html preserves hyperlinks, bold, italic, etc.
+    # message.html_text preserves hyperlinks, bold, italic, etc.
     # Falls back to message.text if no HTML formatting
-    final_caption = message.html if message.html else message.text
+    from aiogram.utils.text_decorations import HtmlDecoration
+    
+    if message.caption:
+        html_decoration = HtmlDecoration()
+        final_caption = html_decoration.unparse(message.caption, message.caption_entities)
+    else:
+        final_caption = message.html_text if message.html_text else message.text
 
     with get_session() as session:
         poster = session.query(Poster).filter(

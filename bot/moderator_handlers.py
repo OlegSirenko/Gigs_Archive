@@ -155,7 +155,12 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                         f"{t('moderation.moderation_finalize.id', language, id=poster_id)}\n"
                         f"{t('moderation.moderation_finalize.userlink', language, userlink=poster.caption)}\n\n"
                         f"{t('moderation.moderation_finalize.description', language)}"
-                        f"{t('moderation.moderation_finalize.footer', language)}"
+                        f"{t('moderation.moderation_finalize.footer', language)}\n\n"
+                        f"💡 <i>Вы можете использовать HTML-форматирование: "
+                        f"&lt;a href=\"https://example.com\"&gt;ссылка&lt;/a&gt;, "
+                        f"&lt;b&gt;жирный&lt;/b&gt;, "
+                        f"&lt;i&gt;курсив&lt;/i&gt;, "
+                        f"&lt;code&gt;код&lt;/code&gt;</i>"
                     )
                     
                     skip_builder = InlineKeyboardBuilder()
@@ -524,13 +529,18 @@ async def skip_description(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer()
 
 
-@moderator_edit_router.message(ModeratorEdit.waiting_for_description, F.text, F.from_user.id.in_(config.admin_ids))
+@moderator_edit_router.message(ModeratorEdit.waiting_for_description, F.text | F.entities, F.from_user.id.in_(config.admin_ids))
 async def process_moderator_description(message: types.Message, state: FSMContext):
-    """Handle moderator typing description - EDIT the stored instruction message"""
-    
+    """Handle moderator typing description - supports plain text AND HTML formatting"""
+
     language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
     moderator_id = message.from_user.id
-    
+
+    # ✅ Get caption with HTML formatting if available
+    # message.html preserves hyperlinks, bold, italic, etc.
+    # Falls back to message.text if no HTML formatting
+    final_caption = message.html if message.html else message.text
+
     with get_session() as session:
         poster = session.query(Poster).filter(
             and_(
@@ -538,20 +548,20 @@ async def process_moderator_description(message: types.Message, state: FSMContex
                 Poster.moderated_by == moderator_id
             )
         ).order_by(Poster.moderated_at.desc()).first()
-        
+
         if not poster:
             await message.answer(
                 t("moderation.no_posters_pending", language)
             )
             return
-        
+
         poster_id = poster.id
-        
+
         # ✅ GET CURRENT STATE DATA (should have instruction_message_id)
         current_data = await state.get_data()
         instruction_message_id = current_data.get('instruction_message_id')
         instruction_chat_id = current_data.get('instruction_chat_id')
-        
+
         # ✅ SET FSM STATE
         await state.set_state(ModeratorEdit.waiting_for_confirmation)
         await state.update_data(
@@ -559,7 +569,7 @@ async def process_moderator_description(message: types.Message, state: FSMContex
             user_id=poster.user_id,
             is_anonymous=poster.is_anonymous,
             photo_file_id=poster.photo_file_id,
-            final_caption=message.text,
+            final_caption=final_caption,
             event_date=poster.event_date.isoformat() if poster.event_date else None,
             first_name=poster.user.first_name if poster.user else None,
             username=poster.user.username if poster.user else None,
@@ -567,11 +577,11 @@ async def process_moderator_description(message: types.Message, state: FSMContex
             instruction_message_id=instruction_message_id,
             instruction_chat_id=instruction_chat_id,
         )
-        
-        # Build preview
+
+        # Build preview — use HTML caption if available
         preview_caption = format_public_caption(
             data={
-                "caption": message.text,
+                "caption": final_caption,
                 "event_date": poster.event_date.isoformat() if poster.event_date else None,
                 "is_anonymous": poster.is_anonymous
             },

@@ -165,6 +165,7 @@
       "cancel_returned": "{operation_cancelled}\n\nАфиша #{poster_id} возвращена в очередь модерации.",
       "sent_to_dm": "✅ Отправлено в ЛС для финализации!",
       "poster_declined": "❌ Афиша отклонена!",
+      "already_processed": "⚠️ Эта афиша уже обработана другим модератором",
       "test_mode_caption": "\n\n⚠️ <i>ТЕСТОВЫЙ РЕЖИМ — не реальная публикация</i>",
       "published_channel": "🔗 Опубликовано: {channel_link}",
       "poster_published": "✅ <b>Афиша #{poster_id} опубликована!</b>"
@@ -223,7 +224,7 @@
       "more_in_queue": "... и ещё {count} в очереди",
       "how_to_find_title": "Как найти сообщение:",
       "how_to_find_step1": "Откройте чат модерации",
-      "how_to_find_step2": "Введите ID афиши в поиск (или используйте @MessageInfoBot)",
+      "how_to_find_step2": "Введите ID афиши в поиск",
       "how_to_find_step3": "Или прокрутите до нужного сообщения"
     },
     "moderator_stats": {
@@ -232,6 +233,10 @@
       "approved": "✅ Одобрено",
       "declined": "❌ Отклонено",
       "pending_final": "⏳ Ожидает финализации"
+    },
+    "start_editing": {
+      "title": "✏️ <b>Готовы редактировать?</b>",
+      "description": "Отправьте финальный текст для этой публикации.\n\n💡 <i>Вы можете использовать HTML-форматирование</i>"
     },
     "moderation_finalize": {
       "title": "✏️ <b>Создайте финальное описание</b>\n\n",
@@ -334,6 +339,7 @@
     },
     "moderator": {
       "skip": "⏭️ Пропустить — использовать оригинал",
+      "start_editing": "✏️ Начать редактирование",
       "publish": "✅ Опубликовать в канале",
       "edit_again": "✏️ Редактировать ещё раз"
     },

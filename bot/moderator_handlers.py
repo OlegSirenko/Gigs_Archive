@@ -133,14 +133,22 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
 
             if action == "approve":
                 language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
-                
+
                 with get_session() as session:
                     poster = get_poster(session, poster_id)
-                    
+
                     if not poster:
                         await callback.answer(t("common.not_found", language), show_alert=True)
                         return
-                    
+
+                    # ✅ IDEMPOTENCY CHECK: Prevent duplicate processing
+                    if poster.status != ModerationStatus.PENDING.value:
+                        await callback.answer(t("moderation.action.already_processed", language), show_alert=True)
+                        return
+
+                    # ✅ EARLY CALLBACK ANSWER: Acknowledge immediately
+                    await callback.answer(t("moderation.action.sent_to_dm", language), show_alert=False)
+
                     # Update DB to PENDING_FINAL
                     update_poster_status(
                         session=session,
@@ -166,11 +174,17 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                     skip_builder = InlineKeyboardBuilder()
                     skip_builder.row(
                         InlineKeyboardButton(
+                            text=t("keyboards.moderator.start_editing", language),
+                            callback_data=f"moderator:start_edit:{poster_id}"
+                        )
+                    )
+                    skip_builder.row(
+                        InlineKeyboardButton(
                             text=t("keyboards.moderator.skip", language),
                             callback_data=f"moderator:skip:{poster_id}"
                         )
                     )
-                    
+
                     # ✅ Send instruction message and get its ID
                     instruction_message = await callback.bot.send_message(
                         chat_id=moderator_id,
@@ -178,9 +192,8 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                         parse_mode="HTML",
                         reply_markup=skip_builder.as_markup()
                     )
-                    
-                    # ✅ Store instruction message info in FSM state
-                    await state.set_state(ModeratorEdit.waiting_for_description)
+
+                    # ✅ Store instruction message info in FSM state (WITHOUT setting active state)
                     await state.update_data(
                         poster_id=poster_id,
                         user_id=poster.user_id,
@@ -203,9 +216,7 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                         f"<i>{t('moderation.status.pending_final_hint', language)}</i>"
                     )
 
-                    await safe_edit_moderation_message(callback.bot, callback.message.chat.id, callback.message, status_text, language)
-                    
-                    await callback.answer(t("moderation.action.sent_to_dm", language), show_alert=False)
+                    await safe_edit_moderation_message(callback.bot, callback.message.chat.id, callback.message, status_text)
 
             elif action == "decline":
                 # Show decline reason keyboard (stateless)
@@ -294,8 +305,8 @@ async def handle_decline_reason(callback: types.CallbackQuery):
                 f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
             )
 
-            await safe_edit_moderation_message(callback.bot, callback.message.chat.id, callback.message, status_text, language)
-            
+            await safe_edit_moderation_message(callback.bot, callback.message.chat.id, callback.message, status_text)
+
             await callback.answer(t("moderation.action.poster_declined", language), show_alert=False)
             logger.info(f"Poster {poster_id} declined by @{moderator_username} - Reason: {reason_code}")
 
@@ -468,6 +479,42 @@ async def close_userinfo(callback: types.CallbackQuery):
 # ============ MODERATOR DM HANDLERS (Two-Stage Moderation) ===================
 # =============================================================================
 
+@moderator_edit_router.callback_query(F.data.startswith("moderator:start_edit:"))
+async def start_editing(callback: types.CallbackQuery, state: FSMContext):
+    """Handle 'Start Editing' button - sets FSM state in DM context"""
+
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
+    poster_id = int(callback.data.split(":")[2])
+
+    with get_session() as session:
+        poster = get_poster(session, poster_id)
+        if not poster:
+            await callback.answer(t("common.not_found", language), show_alert=True)
+            return
+
+        # ✅ SET FSM STATE HERE (in DM context!)
+        await state.set_state(ModeratorEdit.waiting_for_description)
+        await state.update_data(
+            poster_id=poster_id,
+            user_id=poster.user_id,
+            is_anonymous=poster.is_anonymous,
+            photo_file_id=poster.photo_file_id,
+            original_caption=poster.caption,
+            event_date=poster.event_date.isoformat() if poster.event_date else None,
+            first_name=poster.user.first_name if poster.user else None,
+            username=poster.user.username if poster.user else None,
+        )
+
+        # ✅ EDIT instruction message to show input prompt
+        await callback.message.edit_text(
+            f"{t('moderation.start_editing.title', language)}\n\n"
+            f"{t('moderation.start_editing.description', language)}",
+            parse_mode="HTML"
+        )
+        
+        await callback.answer()
+
+
 @moderator_edit_router.callback_query(F.data.startswith("moderator:skip:"))
 async def skip_description(callback: types.CallbackQuery, state: FSMContext):
     """Handle skip button - FIRST response in DM (sets FSM state)"""
@@ -529,7 +576,7 @@ async def skip_description(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer()
 
 
-@moderator_edit_router.message(ModeratorEdit.waiting_for_description, F.text | F.entities, F.from_user.id.in_(config.admin_ids))
+@moderator_edit_router.message(ModeratorEdit.waiting_for_description, F.text, F.from_user.id.in_(config.admin_ids))
 async def process_moderator_description(message: types.Message, state: FSMContext):
     """Handle moderator typing description - supports plain text AND HTML formatting"""
 

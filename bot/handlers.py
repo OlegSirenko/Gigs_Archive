@@ -28,6 +28,7 @@ from bot.keyboards import (
 from db.models import get_session, User, Poster
 from db.crud import get_or_create_user, create_poster, get_user_stats
 from utils.helpers import format_preview_text, validate_caption, extract_forwarded_info
+from utils.html import get_html_caption
 from utils.i18n import i18n, t
 from utils.privacy import user_needs_to_accept_privacy, get_current_privacy_version, update_user_privacy_acceptance
 from config import config
@@ -161,9 +162,10 @@ async def handle_media_group_message(message: types.Message, state: FSMContext, 
 
     # Extract photo file_id
     if message.photo:
+        # Use get_html_caption to preserve formatting (hyperlinks, bold, italic)
         photo_info = {
             'file_id': message.photo[-1].file_id,
-            'caption': message.caption or ''
+            'caption': get_html_caption(message)
         }
         group['photos'].append(photo_info)
 
@@ -810,9 +812,10 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
             is_group = await handle_media_group_message(message, state)
             if is_group:
                 return  # Don't proceed yet - waiting for more photos
-        
+
         # Single photo (not part of album)
-        caption = message.caption or ""
+        # Use get_html_caption to preserve formatting (hyperlinks, bold, italic)
+        caption = get_html_caption(message)
 
         is_valid, error_message = validate_caption(caption)
 
@@ -876,7 +879,8 @@ async def process_photo(message: types.Message, state: FSMContext):
             return  # Don't proceed yet - waiting for more photos
     
     # Single photo (not part of album)
-    caption = message.caption or ""
+    # Use get_html_caption to preserve formatting (hyperlinks, bold, italic)
+    caption = get_html_caption(message)
 
     # Validate caption (just check for link)
     is_valid, error_message = validate_caption(caption)

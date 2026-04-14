@@ -142,8 +142,16 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                         return
 
                     # ✅ IDEMPOTENCY CHECK: Prevent duplicate processing
-                    if poster.status != ModerationStatus.PENDING.value:
-                        await callback.answer(t("moderation.action.already_processed", language), show_alert=True)
+                    # NOTE: poster.status is Enum object, not string!
+                    if poster.status != ModerationStatus.PENDING:
+                        # Show status-specific message
+                        status_messages = {
+                            ModerationStatus.PENDING_FINAL: t("moderation.action.already_in_progress", language),
+                            ModerationStatus.APPROVED: t("moderation.action.already_approved", language),
+                            ModerationStatus.DECLINED: t("moderation.action.already_declined", language),
+                        }
+                        error_msg = status_messages.get(poster.status, t("moderation.action.already_processed", language))
+                        await callback.answer(error_msg, show_alert=True)
                         return
 
                     # ✅ EARLY CALLBACK ANSWER: Acknowledge immediately

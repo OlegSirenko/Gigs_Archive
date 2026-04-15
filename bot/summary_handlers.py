@@ -18,6 +18,8 @@ from db.crud import get_posters_by_date_range, get_user
 from utils.i18n import i18n, t
 from utils.helpers import format_channel_post_link
 
+import html
+
 logger = logging.getLogger(__name__)
 
 summary_router = Router(name="summary")
@@ -89,10 +91,14 @@ def _render_date_block(date_obj: date, posters: List[Poster], language: str = "r
         link = format_channel_post_link(poster)
         desc = get_short_description(poster.caption, language=language)
 
-        if link:
-            lines.append(f"• <a href=\"{link}\">{desc}</a>")
+        # ✅ ESCAPE USER CONTENT FOR SAFE HTML INSERTION
+        safe_desc = html.escape(desc, quote=True)
+        safe_link = html.escape(link, quote=True) if link else None
+
+        if safe_link:
+            lines.append(f"• <a href=\"{safe_link}\">{safe_desc}</a>")
         else:
-            lines.append(f"• {desc}")
+            lines.append(f"• {safe_desc}")
 
     return lines
 
@@ -202,10 +208,13 @@ def format_auto_friday_summary(
                 link = format_channel_post_link(poster)
                 desc = get_short_description(poster.caption, max_length=80)
                 
-                if link:
-                    lines.append(f"• <a href=\"{link}\">{desc}</a>")
+                safe_desc = html.escape(desc, quote=True)
+                safe_link = html.escape(link, quote=True) if link else None
+                
+                if safe_link:
+                    lines.append(f"• <a href=\"{safe_link}\">{safe_desc}</a>")
                 else:
-                    lines.append(f"• {desc}")
+                    lines.append(f"• {safe_desc}")
     
     lines.append("")
     lines.append(t("subscription.friday_message.footer", language))

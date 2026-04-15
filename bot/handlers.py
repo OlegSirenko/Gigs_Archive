@@ -651,7 +651,7 @@ async def handle_language_selection(callback: types.CallbackQuery):
     await callback.answer()
     logger.info(f"User {callback.from_user.id} selected language: {selected_lang}")
 
-@commands_router.message(Command("poster"))
+@commands_router.message(Command("poster"), F.chat.type == "private")
 async def cmd_poster(message: types.Message, state: FSMContext):
     """Start poster submission wizard"""
     await state.clear()
@@ -725,7 +725,7 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
 # =============================================================================
 # ⚠️ THIS HANDLER MUST COME FIRST - catches ANY photo/forward before state filters
 
-@poster_router.message(F.photo | F.forward_origin)
+@poster_router.message(F.photo | F.forward_origin | F.chat.type == "private")
 async def process_photo_without_command(message: types.Message, state: FSMContext):
     """Auto-start poster flow when user sends photo or forwards message (without /poster)"""
 
@@ -864,7 +864,7 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
 # =============================================================================
 # ⚠️ This handler ONLY runs when user is already in waiting_for_photo state
 
-@poster_router.message(PosterSubmission.waiting_for_photo, F.photo)
+@poster_router.message(PosterSubmission.waiting_for_photo, F.photo, F.chat.type == "private")
 async def process_photo(message: types.Message, state: FSMContext):
     """Handle photo submission with caption validation (after /poster command)"""
 

@@ -151,10 +151,13 @@ def _build_manual_summary(
                 link = format_channel_post_link(poster)
                 desc = get_short_description(poster.caption)
                 
-                if link:
-                    lines.append(f"• <a href=\"{link}\">{desc}</a>")
+                safe_desc = html.escape(desc, quote=True)
+                safe_link = html.escape(link, quote=True) if link else None
+            
+                if safe_link:
+                    lines.append(f"• <a href=\"{safe_link}\">{safe_desc}</a>")
                 else:
-                    lines.append(f"• {desc}")
+                    lines.append(f"• {safe_desc}")
         else:
             lines.append(t("weekly_summary.empty_day", language))
     

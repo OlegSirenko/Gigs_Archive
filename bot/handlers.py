@@ -725,7 +725,7 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
 # =============================================================================
 # ⚠️ THIS HANDLER MUST COME FIRST - catches ANY photo/forward before state filters
 
-@poster_router.message(F.photo | F.forward_origin | F.chat.type == "private")
+@poster_router.message(F.photo | F.forward_origin, F.chat.type == "private")
 async def process_photo_without_command(message: types.Message, state: FSMContext):
     """Auto-start poster flow when user sends photo or forwards message (without /poster)"""
 

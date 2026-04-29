@@ -171,7 +171,8 @@
       "already_declined": "❌ This poster has already been declined",
       "test_mode_caption": "\n\n⚠️ <i>TEST MODE — not a real publication</i>",
       "published_channel": "🔗 Published: {channel_link}",
-      "poster_published": "✅ <b>Poster #{poster_id} published!</b>"
+      "poster_published": "✅ <b>Poster #{poster_id} published!</b>",
+      "edit_cancelled_dm": "✅ Editing cancelled. Poster #{poster_id} returned to queue."
     },
     "actions": "Select action:",
     "preview": {
@@ -239,7 +240,8 @@
     },
     "start_editing": {
       "title": "✏️ <b>Ready to edit?</b>",
-      "description": "Send the final text for this publication.\n\n💡 <i>You can use HTML formatting</i>"
+      "description": "Send the final text for this publication.\n\n💡 <i>You can use HTML formatting</i>",
+      "original_label": "📋 Original caption (tap to copy):"
     },
     "moderation_finalize": {
       "title": "✏️ <b>Create Final Description</b>\n\n",
@@ -291,6 +293,7 @@
     "language_en": "🇬🇧 English",
     "privacy_policy":"🔐 Privacy Policy",
     "privacy_accept": "✅ Accept Privacy Policy",
+    "no_caption": "No caption",
     "privacy_policy_text": {
       "collect":"📊 <b>We collect:</b>\n• Telegram ID, name, username\n• Poster content (photo, text, date)\n• Anonymity and mailing settings\n\n",
       "use":"🎯 <b>We use:</b>\n• For channel publication\n• For content moderation\n• For statistics and mailings\n\n",
@@ -344,7 +347,8 @@
       "skip": "⏭️ Skip — use original",
       "start_editing": "✏️ Start Editing",
       "publish": "✅ Publish to channel",
-      "edit_again": "✏️ Edit again"
+      "edit_again": "✏️ Edit again",
+      "cancel_editing": "❌ Return to the queue"
     },
     "anonymous_choice": {
       "show_name": "👤 Show my name",

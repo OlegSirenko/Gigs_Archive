@@ -671,8 +671,7 @@ async def cancel_during_editing(callback: types.CallbackQuery, state: FSMContext
             session=session,
             poster_id=poster_id,
             status=ModerationStatus.PENDING.value,
-            moderator_id=None,  # ← Clear moderator assignment
-            moderated_at=None
+            moderator_id=None
         )
         
         # ✅ Restore original keyboard on the moderation message

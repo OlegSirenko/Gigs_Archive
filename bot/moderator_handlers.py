@@ -696,7 +696,7 @@ async def cancel_during_editing(callback: types.CallbackQuery, state: FSMContext
                 await callback.bot.send_message(
                     chat_id=config.moderation_chat_id,
                     text=t(
-                        "moderation.action.edit_cancelled",
+                        "moderation.action.returned_to_queue",
                         language,
                         poster_id=poster_id,
                         username=callback.from_user.username or "no_username"

@@ -34,6 +34,10 @@ def user_needs_to_accept_privacy(user: User) -> bool:
 
 def update_user_privacy_acceptance(user: User, version: str = None):
     """Update user's privacy policy acceptance"""
+    if user is None:
+        logger.error("Cannot update privacy: user is None")
+        return 
+        
     if version is None:
         version = get_current_privacy_version()
     

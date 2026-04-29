@@ -295,6 +295,7 @@ async def cmd_start(message: types.Message):
                 is_premium=message.from_user.is_premium or False,
                 subscribe_weekly=True  # Auto-subscribe new users to weekly digest
             )
+        session.commit()
 
     needs_privacy_acceptance = user_needs_to_accept_privacy(user) if user else True
 
@@ -412,6 +413,17 @@ async def accept_privacy_policy(callback: types.CallbackQuery):
     # Check if user is new (needs language selection)
     with get_session() as session:
         user = session.query(User).filter(User.telegram_id == user_id).first()
+        if user is None:
+            # Create user if doesn't exist
+            user = get_or_create_user(
+                session,
+                telegram_id=user_id,
+                username=callback.from_user.username,
+                first_name=callback.from_user.first_name,
+                last_name=callback.from_user.last_name,
+                language_code=callback.from_user.language_code,
+                is_premium=callback.from_user.is_premium or False
+            )
         update_user_privacy_acceptance(user)
         session.commit()
 

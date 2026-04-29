@@ -148,13 +148,13 @@ def moderation_keyboard(user_id: int, is_anonymous: bool, poster_id: int, langua
         )
     )
     
-    if not is_anonymous:
-        builder.row(
-            InlineKeyboardButton(
-                text=t("keyboards.moderation.view_user", language),
-                callback_data=f"userinfo:{user_id}"
-            )
+
+    builder.row(
+        InlineKeyboardButton(
+            text=t("keyboards.moderation.view_user", language),
+            callback_data=f"userinfo:{user_id}"
         )
+    )
     
     return builder
 

@@ -295,9 +295,17 @@ async def cmd_start(message: types.Message):
                 is_premium=message.from_user.is_premium or False,
                 subscribe_weekly=True  # Auto-subscribe new users to weekly digest
             )
+            
+        if user:
+            needs_privacy_acceptance = user_needs_to_accept_privacy(user)
+            subscribe_weekly = user.subscribe_weekly
+        else:
+            needs_privacy_acceptance = True
+            subscribe_weekly = False
+            
         session.commit()
 
-    needs_privacy_acceptance = user_needs_to_accept_privacy(user) if user else True
+    
 
     # Always send welcome message first
     steps_list = i18n.t('commands.start.steps', language)
@@ -310,7 +318,7 @@ async def cmd_start(message: types.Message):
     if is_first_start:
         # New users are auto-subscribed, show auto-subscribe note
         subscription_text = t('commands.start.auto_subscribe_note', language)
-    elif user and user.subscribe_weekly:
+    elif subscribe_weekly:
         subscription_text = t('commands.start.subscription_status_subscribed', language)
     else:
         subscription_text = t('commands.start.subscription_status_unsubscribed', language)

@@ -531,16 +531,31 @@ async def execute_delete_account(callback: types.CallbackQuery, state: FSMContex
         await state.clear()
 
         with get_session() as session:
-            # ✅ Delete user's posters first (foreign key constraint)
-            session.execute(
-                sql_delete(Poster).where(Poster.user_id == user_id)
-            )
-
-            # ✅ Delete user
-            session.execute(
-                sql_delete(User).where(User.telegram_id == user_id)
-            )
-
+            # 1️⃣ Anonymize posters: keep content, hide author
+            session.query(Poster).filter(Poster.user_id == user_id).update({
+                Poster.is_anonymous: True,
+            }, synchronize_session=False)
+            
+            # 2️⃣ Anonymize user record (soft-delete)
+            user = session.query(User).filter(User.telegram_id == user_id).first()
+            if user:
+                time_suffix = int(datetime.now().strftime('%H%M%S%f')[:-3])
+    
+                # Make negative + append suffix to guarantee uniqueness
+                user.telegram_id = -(user.telegram_id * 1_000_000_000 + time_suffix)
+                
+                # Wipe personal data
+                user.first_name = "Deleted User"
+                user.last_name = None
+                user.username = None
+                user.language_code = None
+                user.subscribe_weekly = False
+                user.privacy_accepted = False
+                user.privacy_version_accepted = 0
+                user.updated_at = datetime.now()
+                
+                session.add(user)
+            
             session.commit()
 
         # Delete confirmation message before showing success

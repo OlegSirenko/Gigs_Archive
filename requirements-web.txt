@@ -1,0 +1,24 @@
+# Gigs Archive — Web Site requirements (install independently of the bot)
+# pip install -r requirements-web.txt
+
+# Web framework & ASGI server
+fastapi>=0.110.0
+uvicorn>=0.29.0
+
+# Templating (Jinja2Templates)
+jinja2>=3.1.0
+
+# Signed session cookies (admin auth)
+itsdangerous>=2.1.0
+
+# Form parsing for /admin/login and article forms
+python-multipart>=0.0.9
+
+# Database (shared SQLite DB with the bot)
+sqlalchemy>=2.0.0
+
+# Optional: load .env if present (site works without it too)
+python-dotenv>=1.0.0
+
+# Used by web/importer.py to download poster photos from Telegram
+httpx>=0.27.0

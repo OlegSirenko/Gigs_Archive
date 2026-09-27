@@ -1,24 +1,31 @@
 """
-Telegram -> website importer (re-posting posters).
+Telegram -> website importer (re-posting posters + weekly starter pack).
 
-Downloads photos of approved posters from Telegram (using the bot token and
-the file_ids already stored in the shared DB) into web_static/posters/, and
-records the local filename so the site can render real images.
+Two modes:
 
-Usage:
-    python -m web.importer            # import all approved posters w/o image
-    python -m web.importer --limit 20 # only first 20
-    python -m web.importer --force    # re-download even if already imported
+1. DB MODE (default):  python -m web.importer
+   Downloads photos of approved posters from Telegram using the bot token and
+   the file_ids already stored in the shared DB, into web_static/posters/.
 
-Requires BOT_TOKEN and DATABASE_PATH in .env (same values the bot uses).
-Safe to run repeatedly; also safe to run while the bot is running.
+2. CHANNEL MODE (starter pack, no database needed):
+   python -m web.importer --channel GigsArchive --out starter_pack
+   Parses the public preview page https://t.me/s/<channel> (no login/token
+   required) and downloads every post photo + caption text into
+   web_static/starter_pack/, writing an index.json manifest grouped by week.
+   This gives a ready-to-browse starter archive even before the bot's DB is
+   connected to the site.
 """
 
 import argparse
 import asyncio
+import html as html_lib
 import json
 import os
+import re
 import sys
+import urllib.request
+from collections import OrderedDict
+from datetime import datetime
 
 import httpx
 

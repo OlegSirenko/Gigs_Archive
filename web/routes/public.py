@@ -24,9 +24,9 @@ noload_poster = noload(Article.poster)
 
 
 def _ctx(request: Request, **extra):
+    """Template context. `request` is passed to TemplateResponse separately."""
     user = get_current_user(request)
     return {
-        "request": request,
         "site_title": settings.site_title,
         "telegram_channel": settings.telegram_channel,
         "current_user": user,
@@ -64,7 +64,7 @@ def home(request: Request):
             .filter(Poster.status == ModerationStatus.APPROVED)
             .count()
         )
-    return templates.TemplateResponse("index.html", _ctx(
+    return templates.TemplateResponse(request, "index.html", _ctx(
         request, upcoming=upcoming, recent_articles=recent_articles,
         total_events=total_events,
     ))
@@ -94,7 +94,7 @@ def posters_list(
             .all()
         )
     pages = max(1, (total + per_page - 1) // per_page)
-    return templates.TemplateResponse("posters.html", _ctx(
+    return templates.TemplateResponse(request, "posters.html", _ctx(
         request, posters=items, q=q, page=page, pages=pages, total=total,
     ))
 
@@ -110,7 +110,7 @@ def poster_detail(request: Request, poster_id: int):
                       Poster.status == ModerationStatus.APPROVED,
                   ).first())
         if not poster:
-            return templates.TemplateResponse("404.html", _ctx(request), status_code=404)
+            return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
         related_articles = (
             s.query(Article)
             .options(noload_poster)
@@ -122,7 +122,7 @@ def poster_detail(request: Request, poster_id: int):
         # simple view counter
         poster.view_count = (poster.view_count or 0) + 1
         s.commit()
-    return templates.TemplateResponse("poster_detail.html", _ctx(
+    return templates.TemplateResponse(request, "poster_detail.html", _ctx(
         request, poster=poster, related_articles=related_articles,
     ))
 
@@ -150,7 +150,7 @@ def articles_list(
             .all()
         )
     pages = max(1, (total + per_page - 1) // per_page)
-    return templates.TemplateResponse("articles.html", _ctx(
+    return templates.TemplateResponse(request, "articles.html", _ctx(
         request, articles=items, kind=kind, page=page, pages=pages, total=total,
     ))
 
@@ -165,7 +165,7 @@ def article_detail(request: Request, slug: str):
                        Article.slug == slug, Article.is_published.is_(True)
                    ).first())
         if not article:
-            return templates.TemplateResponse("404.html", _ctx(request), status_code=404)
-    return templates.TemplateResponse("article_detail.html", _ctx(
+            return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
+    return templates.TemplateResponse(request, "article_detail.html", _ctx(
         request, article=article,
     ))

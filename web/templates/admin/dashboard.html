@@ -1,0 +1,51 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Dashboard — {{ site_title }} Admin{% endblock %}
+{% block content %}
+
+<div class="page-head row">
+  <h1>Dashboard</h1>
+  <a class="btn btn-primary" href="/admin/articles/new">+ New article</a>
+</div>
+
+<div class="stat-cards">
+  <div class="stat"><span>{{ stats.posters_total }}</span><label>posters in DB</label></div>
+  <div class="stat ok"><span>{{ stats.posters_approved }}</span><label>approved (on site)</label></div>
+  <div class="stat warn"><span>{{ stats.posters_pending }}</span><label>pending moderation</label></div>
+  <div class="stat"><span>{{ stats.articles_published }} / {{ stats.articles_total }}</span><label>articles published / total</label></div>
+</div>
+
+<h2>Articles</h2>
+{% if articles %}
+<table class="table">
+  <thead>
+    <tr><th>Title</th><th>Kind</th><th>Status</th><th>Author</th><th>Updated</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for a in articles %}
+    <tr>
+      <td>
+        <a href="/articles/{{ a.slug }}" target="_blank">{{ a.title }}</a>
+        {% if a.poster %}<span class="tag">event #{{ a.poster_id }}</span>{% endif %}
+      </td>
+      <td><span class="kind kind-{{ a.kind }}">{{ a.kind }}</span></td>
+      <td>{% if a.is_published %}<span class="badge badge-ok">published</span>
+          {% else %}<span class="badge badge-draft">draft</span>{% endif %}</td>
+      <td>{{ '@' ~ a.author_username if a.author_username else '—' }}</td>
+      <td class="muted">{{ a.updated_at.strftime('%d %b %Y %H:%M') if a.updated_at else '' }}</td>
+      <td class="actions">
+        <a class="btn btn-small" href="/admin/articles/{{ a.id }}/edit">Edit</a>
+        <form method="post" action="/admin/articles/{{ a.id }}/delete"
+              onsubmit="return confirm('Delete “{{ a.title }}”?');">
+          <button class="btn btn-small btn-danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No articles yet. Write the first interview or review —
+   <a href="/admin/articles/new">New article →</a></p>
+{% endif %}
+
+{% endblock %}

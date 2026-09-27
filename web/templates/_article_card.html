@@ -1,0 +1,20 @@
+<a class="card article-card" href="/articles/{{ a.slug }}">
+  <div class="article-cover">
+    {% if a.cover_image_url %}
+      <img src="{{ a.cover_image_url }}" alt="" loading="lazy">
+    {% elif a.poster and (a.poster | posterimg) %}
+      <img src="{{ a.poster | posterimg }}" alt="" loading="lazy">
+    {% else %}
+      <div class="article-placeholder kind-{{ a.kind }}"><span>{{ a.kind }}</span></div>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    <span class="kind kind-{{ a.kind }}">{{ a.kind }}</span>
+    <h3>{{ a.title }}</h3>
+    {% if a.lead %}<p class="excerpt">{{ a.lead[:160] }}{% if a.lead|length > 160 %}…{% endif %}</p>{% endif %}
+    <p class="meta">
+      {% if a.published_at %}{{ a.published_at.strftime('%d %b %Y') }}{% endif %}
+      {% if a.author_username %} · @{{ a.author_username }}{% endif %}
+    </p>
+  </div>
+</a>

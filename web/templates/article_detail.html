@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ article.title }} — {{ site_title }}{% endblock %}
+{% block content %}
+
+<article class="detail article-detail">
+  <header class="article-header">
+    <span class="kind kind-{{ article.kind }}">{{ article.kind }}</span>
+    <h1>{{ article.title }}</h1>
+    {% if article.lead %}<p class="lead">{{ article.lead }}</p>{% endif %}
+    <p class="meta muted">
+      {% if article.published_at %}{{ article.published_at.strftime('%d %B %Y') }} · {% endif %}
+      {% if article.author_username %}by @{{ article.author_username }}{% endif %}
+    </p>
+  </header>
+
+  {% if article.cover_image_url %}
+    <figure class="article-cover-img"><img src="{{ article.cover_image_url }}" alt=""></figure>
+  {% elif article.poster and (article.poster | posterimg) %}
+    <figure class="article-cover-img">
+      <img src="{{ article.poster | posterimg }}" alt="">
+      {% if article.poster.caption %}
+        <figcaption>Poster: {{ article.poster.caption | firstline }}</figcaption>
+      {% endif %}
+    </figure>
+  {% endif %}
+
+  <div class="article-body">
+    {{ article.body | renderbody | safe }}
+  </div>
+
+  {% if article.poster %}
+    <aside class="linked-event">
+      <p class="muted">Linked event:</p>
+      <a href="/posters/{{ article.poster.id }}">🎭 {{ article.poster.caption | firstline }}</a>
+    </aside>
+  {% endif %}
+
+  <p class="detail-actions"><a class="btn" href="/articles">← All articles</a></p>
+</article>
+
+{% endblock %}

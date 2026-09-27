@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ poster.caption | firstline }} — {{ site_title }}{% endblock %}
+{% block content %}
+
+<article class="detail poster-detail">
+  <div class="detail-media">
+    {% set img = poster | posterimg %}
+    {% if img %}
+      <img src="{{ img }}" alt="{{ poster.caption | firstline }}">
+    {% else %}
+      <div class="poster-placeholder big"><span>{{ poster.caption | firstline }}</span></div>
+      <p class="hint">Image lives in Telegram — run <code>python -m web.importer</code>
+        (or set <code>POSTER_IMAGE_URL_TEMPLATE</code>) to show it here.</p>
+    {% endif %}
+  </div>
+
+  <div class="detail-body">
+    <h1>{{ poster.caption | firstline }}</h1>
+
+    {% if poster.event_date %}
+      <p class="event-date">📅 {{ poster.event_date.strftime('%A, %d %B %Y, %H:%M') }}</p>
+    {% endif %}
+
+    {% if poster.caption %}
+      <div class="caption">{{ poster.caption }}</div>
+    {% endif %}
+
+    <p class="meta muted">
+      {% if not poster.is_anonymous and poster.user and poster.user.username %}
+        Posted by @{{ poster.user.username }} ·
+      {% else %}
+        Posted anonymously ·
+      {% endif %}
+      {{ poster.view_count or 0 }} views
+    </p>
+
+    <div class="detail-actions">
+      {% set tglink = poster | tglink %}
+      {% if tglink %}<a class="btn btn-primary" href="{{ tglink }}" target="_blank" rel="noopener">Open in Telegram ↗</a>{% endif %}
+      <a class="btn" href="/posters">← All posters</a>
+    </div>
+  </div>
+</article>
+
+{% if related_articles %}
+<section>
+  <h2>Read more about this event</h2>
+  <div class="grid grid-articles">
+    {% for a in related_articles %}{% include "_article_card.html" %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% endblock %}

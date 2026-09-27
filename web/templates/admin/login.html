@@ -1,0 +1,24 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Admin login — {{ site_title }}{% endblock %}
+{% block content %}
+
+<section class="login-box">
+  <h1>Admin sign-in</h1>
+  <p class="muted">Only usernames from the admin list can enter. This is the same
+     crew that moderates posters in the Telegram bot.</p>
+
+  {% if error %}<p class="flash flash-error">{{ error }}</p>{% endif %}
+
+  <form method="post" action="/admin/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label for="username">Telegram username</label>
+    <input id="username" name="username" type="text" placeholder="your_username"
+           autocomplete="username" autofocus required pattern="[A-Za-z0-9_@]{2,40}">
+    <button class="btn btn-primary" type="submit">Sign in</button>
+  </form>
+
+  <p class="hint">No password yet — this is a basic UI step. Telegram OAuth
+     (“Login with Telegram” widget) or password + TOTP can be layered on later.</p>
+</section>
+
+{% endblock %}

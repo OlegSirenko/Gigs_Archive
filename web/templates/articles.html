@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Articles — {{ site_title }}{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h1>Interviews &amp; reviews</h1>
+  <p class="muted">Long reads by the editors of {{ site_title }}: conversations with
+     musicians, critics and organisers around the events on our wall.</p>
+  <div class="tabs">
+    <a href="/articles" class="tab {{ 'active' if not kind }}">All</a>
+    <a href="/articles?kind=interview" class="tab {{ 'active' if kind == 'interview' }}">Interviews</a>
+    <a href="/articles?kind=review" class="tab {{ 'active' if kind == 'review' }}">Reviews</a>
+    <a href="/articles?kind=article" class="tab {{ 'active' if kind == 'article' }}">Articles</a>
+  </div>
+</div>
+
+{% if articles %}
+<div class="grid grid-articles">
+  {% for a in articles %}{% include "_article_card.html" %}{% endfor %}
+</div>
+
+{% if pages > 1 %}
+<nav class="pagination">
+  {% if page > 1 %}<a href="/articles?page={{ page-1 }}{% if kind %}&kind={{ kind }}{% endif %}">← Newer</a>{% endif %}
+  <span>{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a href="/articles?page={{ page+1 }}{% if kind %}&kind={{ kind }}{% endif %}">Older →</a>{% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<section class="empty"><p>No published articles yet. Admins can write them in the
+  <a href="/admin">admin panel</a>.</p></section>
+{% endif %}
+
+{% endblock %}

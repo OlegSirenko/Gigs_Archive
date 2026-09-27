@@ -1,0 +1,19 @@
+<a class="card poster-card" href="/posters/{{ p.id }}">
+  <div class="poster-thumb">
+    {% set img = p | posterimg %}
+    {% if img %}
+      <img src="{{ img }}" alt="{{ p.caption | firstline }}" loading="lazy">
+    {% else %}
+      <div class="poster-placeholder"><span>{{ p.caption | firstline }}</span></div>
+    {% endif %}
+    {% if p.event_date %}
+      <span class="date-badge">{{ p.event_date.strftime('%d %b') }}</span>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    <h3>{{ p.caption | firstline }}</h3>
+    {% if p.event_date %}
+      <p class="meta">{{ p.event_date.strftime('%A, %d %B %Y, %H:%M') }}</p>
+    {% endif %}
+  </div>
+</a>

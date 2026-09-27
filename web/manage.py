@@ -67,8 +67,8 @@ def cmd_seed_demo():
             poster = Poster(
                 user_id=user.telegram_id,
                 photo_file_id="DEMO_FILE_ID",
-                caption="🎸 Demo Night: The Test Signals + Open Mic\n"
-                        "Club Example, Main Hall\nDoors 19:00 · Start 20:00 · Free entry",
+                caption="🎸 Демо-вечер: The Test Signals + открытый микрофон\n"
+                        "Клуб «Пример», главный зал\nДвери 19:00 · Старт 20:00 · Вход свободный",
                 event_date=datetime.now() + timedelta(days=5),
                 is_anonymous=False,
                 status=ModerationStatus.APPROVED,
@@ -79,19 +79,19 @@ def cmd_seed_demo():
 
         if not s.query(Article).filter(Article.slug.like("demo-interview%")).first():
             article = Article(
-                title="Interview: The Test Signals on keeping the scene alive",
+                title="Интервью: The Test Signals — как удержать сцену живой",
                 slug="demo-interview-the-test-signals",
-                lead="Two days before Demo Night we talked rehearsal rooms, "
-                     "empty venues and why they still play for free on Tuesdays.",
+                lead="За два дня до демо-вечера мы поговорили о репточках, пустых "
+                     "площадках и о том, почему по вторникам они играют бесплатно.",
                 body=(
-                    "**You played to three people in 2023. Now clubs book you twice a season. What changed?**\n\n"
-                    "Honestly — stubbornness. We kept *booking our own nights* when no promoter "
-                    "would touch us. https://example.org/our-nights\n\n"
+                    "**В 2023-м вы играли для трёх человек. Теперь клубы зовут вас дважды за сезон. Что изменилось?**\n\n"
+                    "Честно — упрямство. Мы *организировали свои вечера сами*, когда ни один "
+                    "промоутер не хотел с нами связываться. https://example.org/our-nights\n\n"
                     "---\n\n"
-                    "The room smells like solder and coffee. The band arrived with a box of "
-                    "hand-screenprinted flyers — half of them for this very gig.\n\n"
-                    "\"The archive of posters helps,\" the singer says. \"People see the wall "
-                    "and realise there is a whole scene between the shows.\""
+                    "В комнате пахнет припоем и кофе. Группа пришла с коробкой "
+                    "флаеров, отпечатанных вручную, — половина из них ради этого самого концерта.\n\n"
+                    "\"Архив афишей помогает, — говорит вокалист. — Люди видят стену "
+                    "и понимают: между концертами существует целая сцена.\""
                 ),
                 kind="interview",
                 author_username="admin",

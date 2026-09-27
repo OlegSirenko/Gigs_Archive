@@ -4,12 +4,12 @@
 
 <article class="detail article-detail">
   <header class="article-header">
-    <span class="kind kind-{{ article.kind }}">{{ article.kind }}</span>
+    <span class="kind kind-{{ article.kind }}">{{ article.kind | kind_label }}</span>
     <h1>{{ article.title }}</h1>
     {% if article.lead %}<p class="lead">{{ article.lead }}</p>{% endif %}
     <p class="meta muted">
-      {% if article.published_at %}{{ article.published_at.strftime('%d %B %Y') }} · {% endif %}
-      {% if article.author_username %}by @{{ article.author_username }}{% endif %}
+      {% if article.published_at %}{{ article.published_at | ru_date }} · {% endif %}
+      {% if article.author_username %}автор @{{ article.author_username }}{% endif %}
     </p>
   </header>
 
@@ -19,7 +19,7 @@
     <figure class="article-cover-img">
       <img src="{{ article.poster | posterimg }}" alt="">
       {% if article.poster.caption %}
-        <figcaption>Poster: {{ article.poster.caption | firstline }}</figcaption>
+        <figcaption>Афиша: {{ article.poster.caption | firstline }}</figcaption>
       {% endif %}
     </figure>
   {% endif %}
@@ -30,12 +30,12 @@
 
   {% if article.poster %}
     <aside class="linked-event">
-      <p class="muted">Linked event:</p>
+      <p class="muted">Связанное событие:</p>
       <a href="/posters/{{ article.poster.id }}">🎭 {{ article.poster.caption | firstline }}</a>
     </aside>
   {% endif %}
 
-  <p class="detail-actions"><a class="btn" href="/articles">← All articles</a></p>
+  <p class="detail-actions"><a class="btn" href="/articles">← Все статьи</a></p>
 </article>
 
 {% endblock %}

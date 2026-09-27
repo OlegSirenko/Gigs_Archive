@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Posters — {{ site_title }}{% endblock %}
+{% block title %}Афиши — {{ site_title }}{% endblock %}
 {% block content %}
 
 <div class="page-head">
-  <h1>Event posters</h1>
-  <p class="muted">{{ total }} approved posters re-posted from Telegram.</p>
+  <h1>Афиши мероприятий</h1>
+  <p class="muted">{{ total }} одобренных афишей из Telegram-архива.</p>
   <form class="search" method="get" action="/posters">
     <input type="text" name="q" placeholder="Поиск по названию группы, событию…" value="{{ q }}">
-    <button class="btn btn-primary" type="submit">Search</button>
+    <button class="btn btn-primary" type="submit">Найти</button>
   </form>
 </div>
 
@@ -20,14 +20,14 @@
 
 {% if pages > 1 %}
 <nav class="pagination">
-  {% if page > 1 %}<a href="/posters?page={{ page-1 }}{% if q %}&q={{ q }}{% endif %}">← Newer</a>{% endif %}
+  {% if page > 1 %}<a href="/posters?page={{ page-1 }}{% if q %}&q={{ q }}{% endif %}">← Новее</a>{% endif %}
   <span>{{ page }} / {{ pages }}</span>
-  {% if page < pages %}<a href="/posters?page={{ page+1 }}{% if q %}&q={{ q }}{% endif %}">Older →</a>{% endif %}
+  {% if page < pages %}<a href="/posters?page={{ page+1 }}{% if q %}&q={{ q }}{% endif %}">Старше →</a>{% endif %}
 </nav>
 {% endif %}
 
 {% else %}
-<section class="empty"><p>No posters found{% if q %} for “{{ q }}”{% endif %}.</p></section>
+<section class="empty"><p>Афиши не найдены{% if q %} по запросу «{{ q }}»{% endif %}.</p></section>
 {% endif %}
 
 {% endblock %}

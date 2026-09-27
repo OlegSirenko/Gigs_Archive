@@ -44,8 +44,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(404)
     async def not_found(request: Request, exc):
-        return templates.TemplateResponse("404.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "404.html", {
             "site_title": settings.site_title,
             "telegram_channel": settings.telegram_channel,
             "current_user": None,

@@ -5,15 +5,15 @@
     {% elif a.poster and (a.poster | posterimg) %}
       <img src="{{ a.poster | posterimg }}" alt="" loading="lazy">
     {% else %}
-      <div class="article-placeholder kind-{{ a.kind }}"><span>{{ a.kind }}</span></div>
+      <div class="article-placeholder kind-{{ a.kind }}"><span>{{ a.kind | kind_label }}</span></div>
     {% endif %}
   </div>
   <div class="card-body">
-    <span class="kind kind-{{ a.kind }}">{{ a.kind }}</span>
+    <span class="kind kind-{{ a.kind }}">{{ a.kind | kind_label }}</span>
     <h3>{{ a.title }}</h3>
     {% if a.lead %}<p class="excerpt">{{ a.lead[:160] }}{% if a.lead|length > 160 %}…{% endif %}</p>{% endif %}
     <p class="meta">
-      {% if a.published_at %}{{ a.published_at.strftime('%d %b %Y') }}{% endif %}
+      {% if a.published_at %}{{ a.published_at | ru_date }}{% endif %}
       {% if a.author_username %} · @{{ a.author_username }}{% endif %}
     </p>
   </div>

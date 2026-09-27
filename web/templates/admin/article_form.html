@@ -1,11 +1,11 @@
 {% extends "admin/base_admin.html" %}
-{% block title %}{{ 'Edit article' if article else 'New article' }} — {{ site_title }} Admin{% endblock %}
+{% block title %}{{ 'Редактирование статьи' if article else 'Новая статья' }} — админ {{ site_title }}{% endblock %}
 {% block content %}
 
 <div class="page-head row">
-  <h1>{{ 'Edit article' if article else 'New article' }}</h1>
+  <h1>{{ 'Редактирование статьи' if article else 'Новая статья' }}</h1>
   {% if article %}
-    <a class="btn" href="/articles/{{ article.slug }}" target="_blank">Preview on site ↗</a>
+    <a class="btn" href="/articles/{{ article.slug }}" target="_blank">Посмотреть на сайте ↗</a>
   {% endif %}
 </div>
 
@@ -14,13 +14,13 @@
 <form class="article-form" method="post"
       action="{{ '/admin/articles/' ~ article.id ~ '/edit' if article else '/admin/articles/new' }}">
 
-  <label for="title">Title *</label>
+  <label for="title">Заголовок *</label>
   <input id="title" name="title" type="text" required maxlength="200"
-         value="{{ form.get('title', '') }}" placeholder="e.g. Interview: …">
+         value="{{ form.get('title', '') }}" placeholder="Например: Интервью с …">
 
   <div class="form-row">
     <div>
-      <label for="kind">Type</label>
+      <label for="kind">Тип</label>
       <select id="kind" name="kind">
         {% for k, label in kinds.items() %}
           <option value="{{ k }}" {{ 'selected' if form.get('kind', 'article') == k }}>{{ label }}</option>
@@ -28,38 +28,38 @@
       </select>
     </div>
     <div>
-      <label for="poster_id">Linked event (optional)</label>
+      <label for="poster_id">Связанное событие (необязательно)</label>
       <select id="poster_id" name="poster_id">
-        <option value="">— none —</option>
+        <option value="">— нет —</option>
         {% for p in posters %}
           <option value="{{ p.id }}" {{ 'selected' if selected_poster_id == p.id|string }}>
-            #{{ p.id }} · {{ p.caption | firstline }}{{ ' (' ~ p.event_date.strftime('%d.%m.%Y') ~ ')' if p.event_date }}
+            #{{ p.id }} · {{ p.caption | firstline }}{{ ' (' ~ p.event_date | ru_date ~ ')' if p.event_date }}
           </option>
         {% endfor %}
       </select>
     </div>
   </div>
 
-  <label for="lead">Lead (short intro shown in lists)</label>
+  <label for="lead">Лид — короткое вступление для списков</label>
   <textarea id="lead" name="lead" rows="2" maxlength="400"
-            placeholder="One or two sentences…">{{ form.get('lead', '') }}</textarea>
+            placeholder="Одно-два предложения…">{{ form.get('lead', '') }}</textarea>
 
-  <label for="cover_image_url">Cover image URL (optional)</label>
+  <label for="cover_image_url">URL обложки (необязательно)</label>
   <input id="cover_image_url" name="cover_image_url" type="url" maxlength="300"
          value="{{ form.get('cover_image_url', '') }}"
          placeholder="https://… or /static/posters/some.jpg">
 
-  <label for="body">The big text * — interviews, reviews, criticism</label>
+  <label for="body">Основной текст * — интервью, репортажи, критика</label>
   <textarea id="body" name="body" rows="18" required
-            placeholder="Blank line = new paragraph. **bold**, *italic*, plain links are supported. A line with only --- becomes a divider.">{{ form.get('body', '') }}</textarea>
+            placeholder="Пустая строка = новый абзац. Поддерживаются **жирный**, *курсив* и обычные ссылки. Строка из одних --- становится разделителем.">{{ form.get('body', '') }}</textarea>
 
   <div class="form-foot">
     <label class="checkbox">
       <input type="checkbox" name="publish" value="1"
-             {{ 'checked' if article and article.is_published }}> Publish immediately
+             {{ 'checked' if article and article.is_published }}> Опубликовать сразу
     </label>
-    <button class="btn btn-primary" type="submit">{{ 'Save' if article else 'Create' }}</button>
-    <a class="btn" href="/admin">Cancel</a>
+    <button class="btn btn-primary" type="submit">{{ 'Сохранить' if article else 'Создать' }}</button>
+    <a class="btn" href="/admin">Отмена</a>
   </div>
 </form>
 

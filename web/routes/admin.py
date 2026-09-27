@@ -24,11 +24,16 @@ from web.posters import first_line, poster_image_url
 
 router = APIRouter(prefix="/admin")
 
+from web import i18n_web
+from web.i18n_web import KIND_LABELS as KINDS
+
 templates = Jinja2Templates(directory="web/templates")
 templates.env.filters["firstline"] = first_line
 templates.env.filters["posterimg"] = poster_image_url
-
-KINDS = {"article": "Article", "interview": "Interview", "review": "Review"}
+templates.env.filters["ru_date"] = i18n_web.ru_date
+templates.env.filters["ru_datetime"] = i18n_web.ru_datetime
+templates.env.filters["ru_date_short"] = i18n_web.ru_date_short
+templates.env.filters["kind_label"] = i18n_web.kind_label
 
 
 def _ctx(request: Request, **extra):

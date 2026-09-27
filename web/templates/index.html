@@ -1,23 +1,23 @@
 {% extends "base.html" %}
-{% block title %}{{ site_title }} — live gig posters & scene interviews{% endblock %}
+{% block title %}{{ site_title }} — афиши концертов и статьи о сцене{% endblock %}
 {% block content %}
 
 <section class="hero">
-  <h1>Every gig on one wall.</h1>
+  <h1>Все концерты — на одной стене.</h1>
   <p class="lead">
-    Posters published by the community via our Telegram bot — collected, moderated
-    and archived here. Long reads by the editors: interviews with musicians and
-    reviews of what actually happened on stage.
+    Афиши, которые публикует сообщество через нашего Telegram-бота — собраны,
+    проверены и сохранены здесь. Большие тексты от редакции: интервью с
+    музыкантами и репортажи о том, что происходило на сцене.
   </p>
   <div class="hero-actions">
-    <a class="btn btn-primary" href="/posters">Browse {{ total_events }} posters</a>
-    <a class="btn" href="/articles">Read articles</a>
+    <a class="btn btn-primary" href="/posters">Смотреть афиши ({{ total_events }})</a>
+    <a class="btn" href="/articles">Читать статьи</a>
   </div>
 </section>
 
 {% if upcoming %}
 <section>
-  <h2>Upcoming events</h2>
+  <h2>Скорые события</h2>
   <div class="grid">
     {% for p in upcoming %}
       {% include "_poster_card.html" %}
@@ -29,8 +29,8 @@
 {% if recent_articles %}
 <section>
   <div class="section-head">
-    <h2>From the editors</h2>
-    <a class="more" href="/articles">All articles →</a>
+    <h2>От редакции</h2>
+    <a class="more" href="/articles">Все статьи →</a>
   </div>
   <div class="grid grid-articles">
     {% for a in recent_articles %}
@@ -42,10 +42,10 @@
 
 {% if not upcoming and not recent_articles %}
 <section class="empty">
-  <p>Nothing here yet. The archive fills up as moderators approve posters in
-     <a href="https://t.me/{{ telegram_channel }}">the Telegram channel</a>,
-     and admins publish interviews &amp; reviews from the
-     <a href="/admin">admin panel</a>.</p>
+  <p>Пока пусто. Архив пополняется, когда модераторы одобряют афиши в
+     <a href="https://t.me/{{ telegram_channel }}">Telegram-канале</a>,
+     а редакция публикует интервью и репортажи в
+     <a href="/admin">админ-панели</a>.</p>
 </section>
 {% endif %}
 

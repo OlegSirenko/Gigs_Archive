@@ -14,6 +14,7 @@ import secrets
 
 WEB_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(WEB_DIR)
+STATIC_ROOT_DIR = os.path.join(PROJECT_ROOT, "web_static")
 
 
 def _parse_env_file(path: str) -> dict:
@@ -98,7 +99,22 @@ class WebSettings:
 
         # --- Site meta ---
         self.site_title = os.environ.get("SITE_TITLE", "Gigs Archive")
-        self.telegram_channel = os.environ.get("TELEGRAM_CHANNEL", "Gigs_archive")
+        # Public Telegram channel username (links are built as https://t.me/<name>)
+        self.telegram_channel = os.environ.get("TELEGRAM_CHANNEL", "GigsArchive")
+
+        # --- Logo ---
+        # The site logo lives in web_static/img/. If it is missing, the
+        # `python -m web.logo` command downloads the channel's photo from
+        # Telegram (no login required) into that folder.
+        self.logo_url = None
+        for _ext in ("jpg", "png", "webp"):
+            _p = os.path.join(STATIC_ROOT_DIR, "img", f"logo.{_ext}")
+            if os.path.isfile(_p):
+                self.logo_path = _p
+                self.logo_url = f"/img/logo.{_ext}"
+                break
+        else:
+            self.logo_path = os.path.join(STATIC_ROOT_DIR, "img", "logo.jpg")
 
         # --- Telegram poster images (re-posted from the bot/channel) ---
         # Public Bot API endpoint that serves channel photos, e.g.

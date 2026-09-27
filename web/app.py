@@ -11,6 +11,7 @@ from web.config import settings
 from web.database import init_web_db
 from web.posters import first_line, poster_image_url, telegram_post_link
 from web.helpers import render_body
+from web import i18n_web
 from web.routes import admin as admin_routes
 from web.routes import public as public_routes
 
@@ -37,6 +38,11 @@ def create_app() -> FastAPI:
     templates.env.filters["posterimg"] = poster_image_url
     templates.env.filters["tglink"] = telegram_post_link
     templates.env.filters["renderbody"] = render_body
+    # Russian date/label formatting (the site is RU-first)
+    templates.env.filters["ru_date"] = i18n_web.ru_date
+    templates.env.filters["ru_datetime"] = i18n_web.ru_datetime
+    templates.env.filters["ru_date_short"] = i18n_web.ru_date_short
+    templates.env.filters["kind_label"] = i18n_web.kind_label
     app.state.templates = templates
 
     app.include_router(public_routes.router)

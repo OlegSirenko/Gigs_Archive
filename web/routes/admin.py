@@ -32,9 +32,9 @@ KINDS = {"article": "Article", "interview": "Interview", "review": "Review"}
 
 
 def _ctx(request: Request, **extra):
+    """Template context. `request` is passed to TemplateResponse separately."""
     user = get_current_user(request)
     return {
-        "request": request,
         "site_title": settings.site_title,
         "telegram_channel": settings.telegram_channel,
         "current_user": user,
@@ -50,7 +50,7 @@ def login_form(request: Request, next: str = "/admin", error: str = ""):
     user = get_current_user(request)
     if user and user.is_admin:
         return RedirectResponse("/admin", status_code=302)
-    return templates.TemplateResponse("admin/login.html",
+    return templates.TemplateResponse(request, "admin/login.html",
                                       _ctx(request, next=next, error=error))
 
 
@@ -61,6 +61,7 @@ def login(request: Request, username: str = Form(...), next: str = Form("/admin"
         next = "/admin"
     if not settings.is_admin_username(username):
         return templates.TemplateResponse(
+            request,
             "admin/login.html",
             _ctx(request, next=next,
                  error="Access denied: this username is not on the admin list."),
@@ -102,7 +103,7 @@ def dashboard(request: Request):
             "articles_total": len(articles),
             "articles_published": sum(1 for a in articles if a.is_published),
         }
-    return templates.TemplateResponse("admin/dashboard.html",
+    return templates.TemplateResponse(request, "admin/dashboard.html",
                                       _ctx(request, articles=articles, stats=stats))
 
 
@@ -115,7 +116,7 @@ def article_new(request: Request):
         posters = (s.query(Poster)
                    .filter(Poster.status == ModerationStatus.APPROVED)
                    .order_by(Poster.created_at.desc()).limit(200).all())
-    return templates.TemplateResponse("admin/article_form.html", _ctx(
+    return templates.TemplateResponse(request, "admin/article_form.html", _ctx(
         request, article=None, posters=posters,
         form={}, selected_poster_id="",
     ))
@@ -159,7 +160,7 @@ def article_edit(request: Request, article_id: int, created: str = "", saved: st
     with get_session() as s:
         article = s.query(Article).get(article_id)
         if not article:
-            return templates.TemplateResponse("404.html", _ctx(request), status_code=404)
+            return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
         posters = (s.query(Poster)
                    .filter(Poster.status == ModerationStatus.APPROVED)
                    .order_by(Poster.created_at.desc()).limit(200).all())
@@ -170,7 +171,7 @@ def article_edit(request: Request, article_id: int, created: str = "", saved: st
             "body": article.body,
             "cover_image_url": article.cover_image_url or "",
         }
-    return templates.TemplateResponse("admin/article_form.html", _ctx(
+    return templates.TemplateResponse(request, "admin/article_form.html", _ctx(
         request, article=article, posters=posters, form=form,
         selected_poster_id=str(article.poster_id or ""),
         flash=("Article created." if created else
@@ -195,7 +196,7 @@ def article_update(
     with get_session() as s:
         article = s.query(Article).get(article_id)
         if not article:
-            return templates.TemplateResponse("404.html", _ctx(request), status_code=404)
+            return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
         new_title = title.strip()[:200]
         if new_title != article.title:
             article.slug = unique_slug(s, Article, slugify(new_title),

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ site_title }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="logo" href="/">🎭 {{ site_title }}</a>
+    <nav>
+      <a href="/posters" class="{{ 'active' if request.url.path.startswith('/posters') }}">Posters</a>
+      <a href="/articles" class="{{ 'active' if request.url.path.startswith('/articles') }}">Articles</a>
+      <a href="https://t.me/{{ telegram_channel }}" target="_blank" rel="noopener">Telegram ↗</a>
+      {% if current_user and current_user.is_admin %}
+        <a href="/admin" class="nav-admin">Admin</a>
+      {% endif %}
+    </nav>
+  </div>
+</header>
+
+<main class="container">
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>{{ site_title }} — archive of event posters, re-posted from
+       <a href="https://t.me/{{ telegram_channel }}">Telegram @{{ telegram_channel }}</a>.</p>
+  </div>
+</footer>
+</body>
+</html>

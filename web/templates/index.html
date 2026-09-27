@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ site_title }} — live gig posters & scene interviews{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <h1>Every gig on one wall.</h1>
+  <p class="lead">
+    Posters published by the community via our Telegram bot — collected, moderated
+    and archived here. Long reads by the editors: interviews with musicians and
+    reviews of what actually happened on stage.
+  </p>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="/posters">Browse {{ total_events }} posters</a>
+    <a class="btn" href="/articles">Read articles</a>
+  </div>
+</section>
+
+{% if upcoming %}
+<section>
+  <h2>Upcoming events</h2>
+  <div class="grid">
+    {% for p in upcoming %}
+      {% include "_poster_card.html" %}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if recent_articles %}
+<section>
+  <div class="section-head">
+    <h2>From the editors</h2>
+    <a class="more" href="/articles">All articles →</a>
+  </div>
+  <div class="grid grid-articles">
+    {% for a in recent_articles %}
+      {% include "_article_card.html" %}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if not upcoming and not recent_articles %}
+<section class="empty">
+  <p>Nothing here yet. The archive fills up as moderators approve posters in
+     <a href="https://t.me/{{ telegram_channel }}">the Telegram channel</a>,
+     and admins publish interviews &amp; reviews from the
+     <a href="/admin">admin panel</a>.</p>
+</section>
+{% endif %}
+
+{% endblock %}

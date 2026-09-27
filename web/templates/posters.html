@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Posters — {{ site_title }}{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h1>Event posters</h1>
+  <p class="muted">{{ total }} approved posters re-posted from Telegram.</p>
+  <form class="search" method="get" action="/posters">
+    <input type="text" name="q" placeholder="Search band, venue, city…" value="{{ q }}">
+    <button class="btn btn-primary" type="submit">Search</button>
+  </form>
+</div>
+
+{% if posters %}
+<div class="grid">
+  {% for p in posters %}
+    {% include "_poster_card.html" %}
+  {% endfor %}
+</div>
+
+{% if pages > 1 %}
+<nav class="pagination">
+  {% if page > 1 %}<a href="/posters?page={{ page-1 }}{% if q %}&q={{ q }}{% endif %}">← Newer</a>{% endif %}
+  <span>{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a href="/posters?page={{ page+1 }}{% if q %}&q={{ q }}{% endif %}">Older →</a>{% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<section class="empty"><p>No posters found{% if q %} for “{{ q }}”{% endif %}.</p></section>
+{% endif %}
+
+{% endblock %}

@@ -7,13 +7,13 @@
       <div class="poster-placeholder"><span>{{ p.caption | firstline }}</span></div>
     {% endif %}
     {% if p.event_date %}
-      <span class="date-badge">{{ p.event_date.strftime('%d %b') }}</span>
+      <span class="date-badge">{{ p.event_date | ru_date_short }}</span>
     {% endif %}
   </div>
   <div class="card-body">
     <h3>{{ p.caption | firstline }}</h3>
     {% if p.event_date %}
-      <p class="meta">{{ p.event_date.strftime('%A, %d %B %Y, %H:%M') }}</p>
+      <p class="meta">{{ p.event_date | ru_datetime }}</p>
     {% endif %}
   </div>
 </a>

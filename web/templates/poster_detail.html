@@ -9,8 +9,9 @@
       <img src="{{ img }}" alt="{{ poster.caption | firstline }}">
     {% else %}
       <div class="poster-placeholder big"><span>{{ poster.caption | firstline }}</span></div>
-      <p class="hint">Image lives in Telegram — run <code>python -m web.importer</code>
-        (or set <code>POSTER_IMAGE_URL_TEMPLATE</code>) to show it here.</p>
+      <p class="hint">Изображение хранится в Telegram — запустите
+        <code>python -m web.importer</code> (или задайте
+        <code>POSTER_IMAGE_URL_TEMPLATE</code>), чтобы показывать его здесь.</p>
     {% endif %}
   </div>
 
@@ -18,7 +19,7 @@
     <h1>{{ poster.caption | firstline }}</h1>
 
     {% if poster.event_date %}
-      <p class="event-date">📅 {{ poster.event_date.strftime('%A, %d %B %Y, %H:%M') }}</p>
+      <p class="event-date">📅 {{ poster.event_date | ru_datetime }}</p>
     {% endif %}
 
     {% if poster.caption %}
@@ -27,24 +28,24 @@
 
     <p class="meta muted">
       {% if not poster.is_anonymous and poster.user and poster.user.username %}
-        Posted by @{{ poster.user.username }} ·
+        Опубликовал @{{ poster.user.username }} ·
       {% else %}
-        Posted anonymously ·
+        Опубликовано анонимно ·
       {% endif %}
-      {{ poster.view_count or 0 }} views
+      {{ poster.view_count or 0 }} просмотров
     </p>
 
     <div class="detail-actions">
       {% set tglink = poster | tglink %}
-      {% if tglink %}<a class="btn btn-primary" href="{{ tglink }}" target="_blank" rel="noopener">Open in Telegram ↗</a>{% endif %}
-      <a class="btn" href="/posters">← All posters</a>
+      {% if tglink %}<a class="btn btn-primary" href="{{ tglink }}" target="_blank" rel="noopener">Открыть в Telegram ↗</a>{% endif %}
+      <a class="btn" href="/posters">← Все афиши</a>
     </div>
   </div>
 </article>
 
 {% if related_articles %}
 <section>
-  <h2>Read more about this event</h2>
+  <h2>Читать об этом событии</h2>
   <div class="grid grid-articles">
     {% for a in related_articles %}{% include "_article_card.html" %}{% endfor %}
   </div>

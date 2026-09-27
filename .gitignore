@@ -1,6 +1,2 @@
-# Compiled files
 __pycache__/
 *.pyc
-
-# Database
-gigs_archive.db

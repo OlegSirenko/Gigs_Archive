@@ -20,6 +20,11 @@ templates.env.filters["firstline"] = first_line
 templates.env.filters["posterimg"] = poster_image_url
 templates.env.filters["tglink"] = telegram_post_link
 templates.env.filters["renderbody"] = render_body
+from web import i18n_web
+templates.env.filters["ru_date"] = i18n_web.ru_date
+templates.env.filters["ru_datetime"] = i18n_web.ru_datetime
+templates.env.filters["ru_date_short"] = i18n_web.ru_date_short
+templates.env.filters["kind_label"] = i18n_web.kind_label
 noload_poster = noload(Article.poster)
 
 

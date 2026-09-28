@@ -1,35 +1,40 @@
-"""Public site routes: home, posters (re-posted from Telegram), articles."""
-
 from datetime import datetime
-
 from fastapi import APIRouter, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse  # <-- ДОБАВЬТЕ RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
-from sqlalchemy.orm import joinedload, lazyload, noload
+from sqlalchemy.orm import joinedload, noload
 
 from web.auth import get_current_user
 from web.config import settings
 from web.database import ModerationStatus, Poster, User, Article, get_session
 from web.helpers import render_body
-from web.posters import first_line, poster_image_url, telegram_post_link
+from web.posters import first_line, telegram_post_link
+from web.helpers import poster_image_url
+from web import i18n_web
+import httpx
+from fastapi.responses import HTMLResponse, StreamingResponse, Response
+import aiohttp
+from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse
+
+
 
 router = APIRouter()
 
+# Инициализация Jinja2 и фильтров (как в оригинальном проекте)
 templates = Jinja2Templates(directory="web/templates")
 templates.env.filters["firstline"] = first_line
 templates.env.filters["posterimg"] = poster_image_url
 templates.env.filters["tglink"] = telegram_post_link
 templates.env.filters["renderbody"] = render_body
-from web import i18n_web
 templates.env.filters["ru_date"] = i18n_web.ru_date
 templates.env.filters["ru_datetime"] = i18n_web.ru_datetime
 templates.env.filters["ru_date_short"] = i18n_web.ru_date_short
 templates.env.filters["kind_label"] = i18n_web.kind_label
 noload_poster = noload(Article.poster)
 
-
 def _ctx(request: Request, **extra):
-    """Template context. `request` is passed to TemplateResponse separately."""
     user = get_current_user(request)
     return {
         "site_title": settings.site_title,
@@ -39,44 +44,47 @@ def _ctx(request: Request, **extra):
         **extra,
     }
 
-
-# ---------------- Home ----------------
-
+# ---------------- Home (Главная страница) ----------------
 @router.get("/")
 def home(request: Request):
+    now = datetime.now()
     with get_session() as s:
+        # 1. Скорые события (будущие)
         upcoming = (
             s.query(Poster)
             .filter(
                 Poster.status == ModerationStatus.APPROVED,
-                Poster.event_date >= datetime.now(),
+                Poster.event_date >= now,
             )
             .order_by(Poster.event_date.asc())
             .limit(6)
             .all()
         )
-        recent_articles = (
-            s.query(Article)
-            .outerjoin(Poster, Article.poster_id == Poster.id)
-            .options(joinedload(Article.poster))
-            .filter(Article.is_published.is_(True))
-            .order_by(Article.published_at.desc())
-            .limit(3)
+        
+        # 2. Недавно прошедшие события (новые!)
+        past_events = (
+            s.query(Poster)
+            .filter(
+                Poster.status == ModerationStatus.APPROVED,
+                Poster.event_date < now,
+            )
+            .order_by(Poster.event_date.desc()) # Сначала самые свежие из прошедших
+            .limit(3) # Показываем 3 карточки
             .all()
         )
-        total_events = (
-            s.query(Poster)
-            .filter(Poster.status == ModerationStatus.APPROVED)
-            .count()
-        )
+
+        total_events = s.query(Poster).filter(Poster.status == ModerationStatus.APPROVED).count()
+
     return templates.TemplateResponse(request, "index.html", _ctx(
-        request, upcoming=upcoming, recent_articles=recent_articles,
+        request, 
+        upcoming=upcoming,
+        past_events=past_events, # Передаем новые данные
         total_events=total_events,
+        recent_articles=[], # Пустой список, чтобы секция статей просто скрылась
     ))
 
 
-# ---------------- Posters (events re-posted from Telegram) ----------------
-
+# ---------------- Posters (Афиши) ----------------
 @router.get("/posters")
 def posters_list(
     request: Request,
@@ -106,6 +114,8 @@ def posters_list(
 
 @router.get("/posters/{poster_id}")
 def poster_detail(request: Request, poster_id: int):
+    print(f"!!! [ROUTE] Запрос на /posters/{poster_id}")
+    
     with get_session() as s:
         poster = (s.query(Poster)
                   .outerjoin(User, Poster.user_id == User.telegram_id)
@@ -114,26 +124,27 @@ def poster_detail(request: Request, poster_id: int):
                       Poster.id == poster_id,
                       Poster.status == ModerationStatus.APPROVED,
                   ).first())
+        
+        print(f"!!! [ROUTE] Постер из БД: {'НАЙДЕН (ID=' + str(poster.id) + ')' if poster else 'НЕ НАЙДЕН'}")
+        
         if not poster:
             return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
-        related_articles = (
-            s.query(Article)
-            .options(noload_poster)
-            .filter(Article.poster_id == poster_id,
-                    Article.is_published.is_(True))
-            .order_by(Article.published_at.desc())
-            .all()
-        )
-        # simple view counter
+        
         poster.view_count = (poster.view_count or 0) + 1
         s.commit()
-    return templates.TemplateResponse(request, "poster_detail.html", _ctx(
-        request, poster=poster, related_articles=related_articles,
-    ))
+        
+        # !!! ПРЯМОЙ ВЫЗОВ ФУНКЦИИ В ОБХОД ФИЛЬТРОВ JINJA2 !!!
+        print("!!! [ПРЯМОЙ ВЫЗОВ] Вызываю poster_image_url напрямую из Python-кода...")
+        manual_url = poster_image_url(poster)
+        print(f"!!! [ПРЯМОЙ ВЫЗОВ] Результат прямого вызова: {manual_url}")
+        
+        return templates.TemplateResponse(request, "poster_detail.html", _ctx(
+            request, 
+            poster=poster,
+            manual_test_url=manual_url  # <-- Передаем результат в шаблон
+        ))
 
-
-# ---------------- Articles (admin long-form content) ----------------
-
+# ---------------- Articles (Статьи) ----------------
 @router.get("/articles")
 def articles_list(
     request: Request,
@@ -159,7 +170,6 @@ def articles_list(
         request, articles=items, kind=kind, page=page, pages=pages, total=total,
     ))
 
-
 @router.get("/articles/{slug}")
 def article_detail(request: Request, slug: str):
     with get_session() as s:
@@ -174,3 +184,50 @@ def article_detail(request: Request, slug: str):
     return templates.TemplateResponse(request, "article_detail.html", _ctx(
         request, article=article,
     ))
+
+
+@router.get("/api/poster-image/{poster_id}")
+async def proxy_poster_image(poster_id: int):
+    """
+    Безопасно проксирует картинку с Telegram. 
+    Токен бота остается на сервере и никогда не передается в браузер.
+    """
+    with get_session() as s:
+        poster = s.query(Poster).filter(
+            Poster.id == poster_id,
+            Poster.status == ModerationStatus.APPROVED
+        ).first()
+        
+        if not poster or not poster.photo_file_id:
+            return Response(content="Not Found", status_code=404)
+    
+    from web.config import settings
+    
+    # 1. Запрашиваем путь к файлу через Bot API (внутри сервера)
+    file_info_url = f"https://api.telegram.org/bot{settings.secret_key}/getFile"
+    
+    async with httpx.AsyncClient() as client:
+        file_resp = await client.get(file_info_url, params={"file_id": poster.photo_file_id})
+        file_data = file_resp.json()
+        
+        if not file_data.get("ok"):
+            return Response(content="Telegram API Error", status_code=502)
+            
+        file_path = file_data["result"]["file_path"]
+        
+        # 2. Скачиваем саму картинку с CDN Telegram (внутри сервера)
+        cdn_url = f"https://api.telegram.org/file/bot{settings.secret_key}/{file_path}"
+        img_resp = await client.get(cdn_url)
+        
+        if img_resp.status_code != 200:
+            return Response(content="Failed to download image", status_code=502)
+        
+        # 3. Отдаем байты картинки браузеру напрямую из памяти нашего сервера
+        # Браузер видит только ответ от НАШЕГО домена. Токен скрыт.
+        return Response(
+            content=img_resp.content,
+            media_type=img_resp.headers.get("content-type", "image/jpeg"),
+            headers={
+                "Cache-Control": "public, max-age=86400", # Разрешаем браузеру кэшировать на 1 день
+            }
+        )

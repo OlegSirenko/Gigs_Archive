@@ -10,7 +10,7 @@
   </div>
   <div class="card-body">
     <span class="kind kind-{{ a.kind }}">{{ a.kind | kind_label }}</span>
-    <h3>{{ a.title }}</h3>
+    <h3 class="ransomify" data-ransom="{{ a.title }}">{{ a.title }}</h3>
     {% if a.lead %}<p class="excerpt">{{ a.lead[:160] }}{% if a.lead|length > 160 %}…{% endif %}</p>{% endif %}
     <p class="meta">
       {% if a.published_at %}{{ a.published_at | ru_date }}{% endif %}

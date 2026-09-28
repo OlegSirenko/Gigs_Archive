@@ -5,31 +5,53 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ site_title }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fontsource-inter@5.0.0/index.css">
 </head>
 <body>
-<header class="site-header">
-  <div class="container header-inner">
-    <a class="logo" href="/">🎭 {{ site_title }}</a>
-    <nav>
-      <a href="/posters" class="{{ 'active' if request.url.path.startswith('/posters') }}">Афиши</a>
-      <a href="/articles" class="{{ 'active' if request.url.path.startswith('/articles') }}">Статьи</a>
-      <a href="https://t.me/{{ telegram_channel }}" target="_blank" rel="noopener">Telegram ↗</a>
-      {% if current_user and current_user.is_admin %}
-        <a href="/admin" class="nav-admin">Admin</a>
-      {% endif %}
-    </nav>
-  </div>
-</header>
+
+{% block header %}
+<!-- Навигационная шапка (одинаковая для всех страниц) -->
+<nav class="navbar" id="navbar">
+    <a href="/" class="nav-logo">
+        <img src="/static/img/logo.jpg" alt="Logo" class="nav-logo-img" onerror="this.style.display='none'">
+        <span>Gigs Archive</span>
+    </a>
+    <ul class="nav-links" id="navLinks">
+        <li><a href="/posters" class="{{ 'active' if request.url.path.startswith('/posters') else '' }}">Афиши</a></li>
+        <li><a href="/articles" class="{{ 'active' if request.url.path.startswith('/articles') else '' }}">Статьи</a></li>
+        <li>
+            <a href="https://t.me/{{ telegram_channel }}" class="nav-telegram" target="_blank">
+                Telegram
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M7 17L17 7M17 7H7M17 7V17"/>
+                </svg>
+            </a>
+        </li>
+        {% if current_user and current_user.is_admin %}
+        <li><a href="/admin" class="nav-admin">Admin</a></li>
+        {% endif %}
+    </ul>
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Меню">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+        </svg>
+    </button>
+</nav>
+{% endblock %}
 
 <main class="container">
   {% block content %}{% endblock %}
 </main>
 
+{% block footer %}
 <footer class="site-footer">
   <div class="container">
     <p>{{ site_title }} — архив афишей мероприятий, репосты из
        <a href="https://t.me/{{ telegram_channel }}">Telegram-канала @{{ telegram_channel }}</a>.</p>
   </div>
 </footer>
+{% endblock %}
+
+<script src="/static/js/main.js"></script>
 </body>
 </html>

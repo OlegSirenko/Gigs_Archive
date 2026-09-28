@@ -2,16 +2,23 @@
 {% block title %}{{ poster.caption | firstline }} — {{ site_title }}{% endblock %}
 {% block content %}
 
+<!-- СРАВНИТЕЛЬНАЯ ОТЛАДКА 
+<div style="background: #2d1b3d; color: #4ade80; padding: 15px; font-family: monospace; margin-bottom: 1rem; border-radius: 8px; font-size: 0.85rem; border: 2px solid #4ade80;">
+    <strong>СРАВНЕНИЕ:</strong><br>
+    1. Через фильтр Jinja2 (posterimg): '{{ poster | posterimg }}'<br>
+    2. Прямой вызов из Python (manual): '{{ manual_test_url }}'
+</div>-->
+
 <article class="detail poster-detail">
   <div class="detail-media">
-    {% set img = poster | posterimg %}
-    {% if img %}
-      <img src="{{ img }}" alt="{{ poster.caption | firstline }}">
+    {% if poster.photo_file_id %}
+      <img src="/api/poster-image/{{ poster.id }}" 
+           alt="{{ poster.caption | firstline }}" 
+           loading="lazy">
     {% else %}
-      <div class="poster-placeholder big"><span>{{ poster.caption | firstline }}</span></div>
-      <p class="hint">Изображение хранится в Telegram — запустите
-        <code>python -m web.importer</code> (или задайте
-        <code>POSTER_IMAGE_URL_TEMPLATE</code>), чтобы показывать его здесь.</p>
+      <div class="poster-placeholder big">
+        <span>{{ poster.caption | firstline }}</span>
+      </div>
     {% endif %}
   </div>
 
@@ -19,11 +26,16 @@
     <h1>{{ poster.caption | firstline }}</h1>
 
     {% if poster.event_date %}
-      <p class="event-date">📅 {{ poster.event_date | ru_datetime }}</p>
+      <p class="event-date">📅 {{ poster.event_date | ru_date }}</p>
     {% endif %}
 
     {% if poster.caption %}
-      <div class="caption">{{ poster.caption }}</div>
+      <!-- Instagram-style карточка с описанием -->
+      <div class="caption-card">
+        <div class="caption-body">
+          {{ poster.caption | renderbody | safe }}
+        </div>
+      </div>
     {% endif %}
 
     <p class="meta muted">
@@ -38,18 +50,9 @@
     <div class="detail-actions">
       {% set tglink = poster | tglink %}
       {% if tglink %}<a class="btn btn-primary" href="{{ tglink }}" target="_blank" rel="noopener">Открыть в Telegram ↗</a>{% endif %}
-      <a class="btn" href="/posters">← Все афиши</a>
+      <a class="btn btn-secondary" href="/posters">← Все афиши</a>
     </div>
   </div>
 </article>
-
-{% if related_articles %}
-<section>
-  <h2>Читать об этом событии</h2>
-  <div class="grid grid-articles">
-    {% for a in related_articles %}{% include "_article_card.html" %}{% endfor %}
-  </div>
-</section>
-{% endif %}
 
 {% endblock %}

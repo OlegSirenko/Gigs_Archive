@@ -68,11 +68,12 @@ def poster_image_url(poster) -> str | None:
 
 def telegram_post_link(poster) -> str | None:
     """Link to the original post in the Telegram channel (t.me/c/<id>/<mid>)."""
+    # https://t.me/GigsArchive/1292
     if not poster.channel_message_id:
         return None
     chat = str(poster.channel_chat_id or "")
     if chat.startswith("-100"):
-        return f"https://t.me/c/{chat[4:]}/{poster.channel_message_id}"
+        return f"https://t.me/GigsArchive/{poster.channel_message_id}"
     return None
 
 

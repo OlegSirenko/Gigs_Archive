@@ -7,7 +7,7 @@
 <nav class="navbar" id="navbar">
     <a href="/" class="nav-logo">
         <img src="/static/img/logo.jpg" alt="Logo" class="nav-logo-img" onerror="this.style.display='none'">
-        <span>Gigs Archive</span>
+        <span class="ransomify" data-ransom="Gigs Archive">Gigs Archive</span>
     </a>
     <ul class="nav-links" id="navLinks">
         <li><a href="#events">Афиши</a></li>
@@ -33,8 +33,8 @@
 {% block content %}
 <style>
     main.container { max-width: 100% !important; padding: 0 !important; }
-    .navbar { background: transparent !important; border-bottom: none !important; }
-    .navbar.scrolled { background: rgba(10, 10, 15, 0.95) !important; border-bottom: 1px solid var(--border-color) !important; }
+    .navbar { background: rgba(10, 10, 15, .92) !important; border-bottom: 3px double var(--gold) !important; }
+    .navbar.scrolled { background: rgba(10, 10, 15, 0.98) !important; }
 </style>
 
 
@@ -46,7 +46,11 @@
                 <span class="hero-badge-dot"></span>
                 Обновлено сегодня
             </div>
-            <h1 class="hero-title">Все концерты —<br>на одной стене.</h1>
+            <!-- Заголовок-вырезка: ransom note набор (fallback — обычный текст до JS) -->
+            <h1 class="hero-title">
+                <span class="ransomify" data-ransom="ВСЕ КОНЦЕРТЫ">ВСЕ КОНЦЕРТЫ</span><br>
+                <span class="rn-paper">на одной</span> <span class="ransomify" data-ransom="СТЕНЕ">СТЕНЕ</span>
+            </h1>
             <p class="hero-description">
                 Афиши, которые публикует сообщество через нашего Telegram-бота — собраны, 
                 проверены и сохранены здесь. Большие тексты от редакции: интервью с 
@@ -55,7 +59,7 @@
             <div class="hero-actions">
                 <a href="#events" class="btn btn-primary">
                     Смотреть афиши
-                    <span style="background: rgba(255,255,255,0.2); padding: 0.15rem 0.5rem; border-radius: 6px; font-size: 0.85rem;">{{ total_events }}</span>
+                    <span style="background: rgba(10,10,15,.85); color: var(--gold); padding: 0.1rem 0.45rem; border: 1px solid var(--gold); font-size: 0.85rem;">{{ total_events }}</span>
                 </a>
                 <a href="#articles" class="btn btn-secondary">Читать статьи</a>
             </div>
@@ -99,7 +103,7 @@
                     {% if img %}
                         <img src="{{ img }}" alt="{{ p.caption | firstline }}" loading="lazy">
                     {% else %}
-                        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg, #1a1a2e 0%, #2d1b3d 100%);color:white;font-size:2rem;">🎸</div>
+                        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(-45deg, #14141d 0 14px, #1b1626 14px 28px);color:var(--gold);font-size:2.4rem;">🎸</div>
                     {% endif %}
                     {% if p.event_date %}
                         <span class="event-date-badge">{{ p.event_date | ru_date_short }}</span>
@@ -143,11 +147,11 @@
                     {% if img %}
                         <img src="{{ img }}" alt="{{ p.caption | firstline }}" loading="lazy">
                     {% else %}
-                        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg, #1a1a2e 0%, #2d1b3d 100%);color:white;font-size:2rem;">🎸</div>
+                        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(-45deg, #14141d 0 14px, #1b1626 14px 28px);color:var(--gold);font-size:2.4rem;">🎸</div>
                     {% endif %}
                     {% if p.event_date %}
-                        <!-- Серый бейдж для прошедших событий -->
-                        <span class="event-date-badge" style="background: var(--text-muted);">{{ p.event_date | ru_date_short }}</span>
+                        <!-- Бейдж прошедшего события — «погашен» -->
+                        <span class="event-date-badge" style="background: var(--text-muted); color: var(--ink);">{{ p.event_date | ru_date_short }}</span>
                     {% endif %}
                 </div>
                 <div class="event-card-body">
@@ -161,7 +165,7 @@
                         {% endif %}
                     </div>
                     <!-- Серый тег -->
-                    <span class="event-tag" style="background: rgba(107, 107, 128, 0.15); color: var(--text-muted);">Прошло</span>
+                    <span class="event-tag" style="color: var(--red); border-color: var(--red); background: transparent;">Прошло</span>
                 </div>
             </a>
             {% endfor %}
@@ -182,7 +186,7 @@
             {% for a in recent_articles %}
             <a href="/articles/{{ a.slug }}" class="article-card reveal">
                 <span class="article-category">{{ a.kind | kind_label }}</span>
-                <h3 class="article-title">{{ a.title }}</h3>
+                <h3 class="article-title ransomify" data-ransom="{{ a.title }}">{{ a.title }}</h3>
                 <p class="article-excerpt">
                     {% if a.lead %}
                         {{ a.lead[:160] }}{% if a.lead|length > 160 %}…{% endif %}
@@ -210,22 +214,22 @@
     <div class="section-container">
         <div class="section-header reveal" style="justify-content: center; text-align: center; flex-direction: column; gap: 0.5rem;">
             <h2 class="section-title">Как это работает</h2>
-            <p style="color: var(--text-secondary); max-width: 500px;">Три простых шага от анонса до архива</p>
+            <p style="color: var(--text-secondary); max-width: 500px; font-family: var(--font-type);">Три простых шага от анонса до архива</p>
         </div>
         <div class="steps-grid">
-            <div class="step-card reveal">
+            <div class="step-card reveal tape">
                 <div class="step-icon">📤</div>
                 <div class="step-number">Шаг 01</div>
                 <h3 class="step-title">Отправьте афишу</h3>
                 <p class="step-description">Пользователи присылают анонсы концертов через нашего Telegram-бота</p>
             </div>
-            <div class="step-card reveal">
+            <div class="step-card reveal tape">
                 <div class="step-icon">✅</div>
                 <div class="step-number">Шаг 02</div>
                 <h3 class="step-title">Проверка</h3>
                 <p class="step-description">Редакция проверяет информацию и добавляет событие в базу</p>
             </div>
-            <div class="step-card reveal">
+            <div class="step-card reveal tape">
                 <div class="step-icon">📚</div>
                 <div class="step-number">Шаг 03</div>
                 <h3 class="step-title">Архив</h3>
@@ -239,7 +243,7 @@
 <section class="section cta-section">
     <div class="section-container">
         <div class="cta-box reveal">
-            <h2 class="cta-title">Знаете о концерте?<br>Поделитесь с нами</h2>
+            <h2 class="cta-title"><span class="ransomify" data-ransom="ЗНАЕТЕ О КОНЦЕРТЕ?">ЗНАЕТЕ О КОНЦЕРТЕ?</span><br><span class="rn-dark">Поделитесь с нами</span></h2>
             <p class="cta-description">Отправьте афишу через Telegram-бота и помогите сохранить историю живой музыки</p>
             <div class="cta-actions">
                 <a href="https://t.me/Gigs_archive_bot" class="btn btn-primary" target="_blank">

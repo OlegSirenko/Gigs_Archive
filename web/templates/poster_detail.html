@@ -23,7 +23,7 @@
   </div>
 
   <div class="detail-body">
-    <h1>{{ poster.caption | firstline }}</h1>
+    <h1 class="ransomify" data-ransom="{{ poster.caption | firstline }}">{{ poster.caption | firstline }}</h1>
 
     {% if poster.event_date %}
       <p class="event-date">📅 {{ poster.event_date | ru_date }}</p>

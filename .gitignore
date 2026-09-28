@@ -3,3 +3,5 @@ __pycache__/
 
 
 gigs_archive.db
+gigs_archive.db
+web/.secret_key

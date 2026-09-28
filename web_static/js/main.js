@@ -1,4 +1,35 @@
 document.addEventListener('DOMContentLoaded', () => {
+    document.body.classList.remove('js-off');
+
+    // 0. Ransom note набор букв: вырезки из разных «шрифтов и бумажек»
+    //    Работает для элементов <span class="ransomify" data-ransom="ТЕКСТ">…</span>
+    //    Без JS остаётся обычный текст (progressive enhancement).
+    const RN_CLASSES = ['rn-a', 'rn-b', 'rn-c3', 'rn-d', 'rn-e', 'rn-f', 'rn-g', 'rn-h'];
+    function buildRansom(el) {
+        const text = el.getAttribute('data-ransom') || el.textContent;
+        if (!text.trim()) return;
+        // Детерминированный seed из текста — набор не «прыгает» между рендерами
+        let seed = 0;
+        for (let i = 0; i < text.length; i++) seed = (seed * 31 + text.charCodeAt(i)) >>> 0;
+        const rand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+
+        el.textContent = '';
+        const words = text.split(/\s+/).filter(Boolean);
+        words.forEach((word, wi) => {
+            const w = document.createElement('span');
+            w.className = 'rn-word';
+            for (const ch of word) {
+                const c = document.createElement('span');
+                c.className = 'rn-c ' + RN_CLASSES[Math.floor(rand() * RN_CLASSES.length)];
+                c.textContent = ch;
+                w.appendChild(c);
+            }
+            el.appendChild(w);
+            if (wi < words.length - 1) el.appendChild(document.createTextNode(' '));
+        });
+    }
+    document.querySelectorAll('.ransomify').forEach(buildRansom);
+
     // 1. Navbar scroll effect (только если есть navbar)
     const navbar = document.getElementById('navbar');
     if (navbar) {
@@ -77,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // 6. Card hover tilt effect (только десктоп)
+    // 6. Card hover tilt effect (только десктоп) — сдержанный «сдвиг вырезки»
     if (window.matchMedia("(min-width: 769px)").matches) {
         document.querySelectorAll('.event-card, .article-card, .card').forEach(card => {
             card.addEventListener('mousemove', (e) => {
@@ -86,9 +117,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const y = e.clientY - rect.top;
                 const centerX = rect.width / 2;
                 const centerY = rect.height / 2;
-                const rotateX = (y - centerY) / 25; // Чуть мягче наклон
-                const rotateY = (centerX - x) / 25;
-                card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-4px)`;
+                const rotateX = (y - centerY) / 90; // мягче:ransom-вырезка почти не «прыгает»
+                const rotateY = (centerX - x) / 90;
+                card.style.transform = `perspective(1200px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-5px)`;
             });
             card.addEventListener('mouseleave', () => { card.style.transform = ''; });
         });

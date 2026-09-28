@@ -4,17 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ site_title }}{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Шрифты ransom/typewriter стиля: печатная машинка, трафарет, вырезки -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Special+Elite&family=Rubik+Mono+One&family=Playfair+Display:ital,wght@0,700;0,900;1,700&display=swap">
   <link rel="stylesheet" href="/static/css/style.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fontsource-inter@5.0.0/index.css">
+  <link rel="stylesheet" href="/static/css/ransom.css">
 </head>
-<body>
+<body class="js-off">
 
 {% block header %}
 <!-- Навигационная шапка (одинаковая для всех страниц) -->
 <nav class="navbar" id="navbar">
     <a href="/" class="nav-logo">
         <img src="/static/img/logo.jpg" alt="Logo" class="nav-logo-img" onerror="this.style.display='none'">
-        <span>Gigs Archive</span>
+        <!-- Логотип-вырезка: буквы в стиле ransom note (набор рендерит main.js) -->
+        <span class="ransomify" data-ransom="Gigs Archive">Gigs Archive</span>
     </a>
     <ul class="nav-links" id="navLinks">
         <li><a href="/posters" class="{{ 'active' if request.url.path.startswith('/posters') else '' }}">Афиши</a></li>

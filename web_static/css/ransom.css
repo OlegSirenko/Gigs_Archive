@@ -650,3 +650,106 @@ html { scroll-behavior: auto; }
     .page-head h1 { font-size: 1.9rem; }
     .steps-grid::before { display: none; }
 }
+
+/* ============ ЛОГОТИП «G i g s | Archive» (увеличенный ransom-логотип) ============
+   Первые 4 буквы — отдельные «вырезки», слово Archive — один общий лоскут бумаги.
+   HTML в base.html/index.html уже содержит нужную разметку (работает и без JS),
+   main.js лишь пересобирает её с детерминированными поворотами/шрифтами. */
+.nav-logo { gap: .8rem; }
+.nav-logo-text {
+    display: inline-flex;
+    align-items: center;
+    gap: .16em;
+    font-size: 1.55rem;            /* было ~1.05rem — стал заметно крупнее */
+    line-height: 1;
+    white-space: nowrap;
+}
+.rn-logo-cut {
+    display: inline-block;
+    padding: .06em .18em .1em;
+    border-radius: 2px 4px 3px 5px;
+    transform: rotate(var(--rot, -2deg));
+    box-shadow: 2px 3px 0 rgba(0, 0, 0, .65);
+    text-transform: none;          /* НЕ капс — как на реальной вырезке */
+    letter-spacing: 0;
+    color: #14141c;
+    background: var(--paper);
+    font-family: var(--font-cut);
+    -webkit-text-fill-color: currentColor;
+}
+.rn-logo-letter { font-size: 1.05em; }
+.rn-logo-word {
+    /* «Archive» — одна цельная бумажка со складкой посередине */
+    position: relative;
+    margin-left: .28em;
+    padding: .08em .4em .12em;
+    --rot: 1.5deg;
+    clip-path: polygon(1% 5%, 99% 0, 97% 95%, 3% 100%);
+    background: linear-gradient(105deg, var(--paper) 0 46%, #e7e0c8 46% 54%, var(--paper-white) 54% 100%);
+    font-family: var(--font-news);
+    font-weight: 900;
+    font-style: italic;
+}
+.nav-logo:hover .rn-logo-letter { transform: rotate(calc(var(--rot, -2deg) * -1.5)) translateY(-1px); }
+.nav-logo:hover .rn-logo-word   { transform: rotate(-1deg) scale(1.03); }
+.rn-logo-cut { transition: transform .15s ease; }
+
+@media (max-width: 768px) {
+    .nav-logo-text { font-size: 1.25rem; }
+}
+
+/* ============ ЗАГОЛОВКИ АФИШ — тот же ransom-стиль, что и весь сайт ============
+   Раньше в _poster_card.html / poster_detail.html был просто капс Anton;
+   теперь они собираются из «вырезанных букв» (.ransomify + main.js). */
+.detail-title.ransomify {
+    font-size: clamp(1.7rem, 4vw, 2.6rem);
+    line-height: 1.35;
+    margin-bottom: 1rem;
+}
+.card-body h3.ransomify {
+    font-size: 1.05rem;
+    line-height: 1.5;
+    margin-bottom: .6rem;
+    -webkit-line-clamp: unset;     /* набор не режем multiline-климпом */
+    overflow: visible;
+}
+.poster-placeholder .rn-tiny {
+    display: inline-block;
+    max-width: 100%;
+    color: inherit;
+    font-weight: inherit;
+}
+/* Внутри плейсхолдера вырезки чуть мельче, чтобы влезали 3–4 строки */
+.rn-tiny .rn-c { font-size: .82em; box-shadow: 1px 2px 0 rgba(0, 0, 0, .55); }
+.rn-tiny .rn-word { vertical-align: baseline; }
+
+/* Fallback без JavaScript: хотя бы «бумажные» заголовки вместо голого UPPERCASE */
+body.js-off .card-body h3:not(.rn-ready),
+body.js-off .detail-title:not(.rn-ready) {
+    display: inline-block;
+    background: var(--gold);
+    color: var(--ink);
+    padding: .05em .35em .1em;
+    transform: rotate(-1deg);
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, .6);
+    clip-path: polygon(1% 5%, 99% 0, 97% 96%, 3% 100%);
+}
+body.js-off .poster-placeholder span {
+    color: var(--gold);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+
+/* ============ Тонировка вырезок палитрой афиши (main.js, data-tint) ============
+   Когда JS вытащил доминирующие цвета из poster img, он красит .rn-c в тон
+   постера и вешает на карточку класс .rn-tinted — буквы «проявляются» с лёгким
+   fade, оставаясь читаемыми за счёт контрастного ink + мягкой тени. */
+.card-body h3 .rn-c,
+.detail-title .rn-c {
+    transition: background-color .45s ease, color .45s ease;
+}
+.poster-card.rn-tinted .card-body h3 .rn-c,
+.poster-detail.rn-tinted .detail-title .rn-c {
+    box-shadow: 2px 3px 0 rgba(0, 0, 0, .45);
+}
+

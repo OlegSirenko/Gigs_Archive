@@ -5,13 +5,27 @@ document.addEventListener('DOMContentLoaded', () => {
     //    Работает для элементов <span class="ransomify" data-ransom="ТЕКСТ">…</span>
     //    Без JS остаётся обычный текст (progressive enhancement).
     const RN_CLASSES = ['rn-a', 'rn-b', 'rn-c3', 'rn-d', 'rn-e', 'rn-f', 'rn-g', 'rn-h'];
+
+    // Детерминированный ГПСЧ из строки — набор букв не «прыгает» между рендерами
+    function rnRand(seedStr) {
+        let seed = 0;
+        for (let i = 0; i < seedStr.length; i++) seed = (seed * 31 + seedStr.charCodeAt(i)) >>> 0;
+        return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    }
+
+    // Лоскут бумаги с целым словом (как в logo-стиле: «Archive» одной вырезкой)
+    function rnPatch(text, cls, rotateDeg) {
+        const s = document.createElement('span');
+        s.className = 'rn-patch' + (cls ? ' ' + cls : '');
+        if (typeof rotateDeg === 'number') s.style.setProperty('--rot', rotateDeg.toFixed(2) + 'deg');
+        s.textContent = text;
+        return s;
+    }
+
     function buildRansom(el) {
         const text = el.getAttribute('data-ransom') || el.textContent;
         if (!text.trim()) return;
-        // Детерминированный seed из текста — набор не «прыгает» между рендерами
-        let seed = 0;
-        for (let i = 0; i < text.length; i++) seed = (seed * 31 + text.charCodeAt(i)) >>> 0;
-        const rand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+        const rand = rnRand(text);
 
         el.textContent = '';
         const words = text.split(/\s+/).filter(Boolean);
@@ -28,7 +42,123 @@ document.addEventListener('DOMContentLoaded', () => {
             if (wi < words.length - 1) el.appendChild(document.createTextNode(' '));
         });
     }
+
+    // Логотип «Gigs Archive»: первые 4 буквы — отдельные вырезки (G i g s),
+    // а всё слово «Archive» — один общий лоскуток бумаги.
+    function buildLogoRansom(el) {
+        const parts = [
+            { t: 'G', patch: false },
+            { t: 'i', patch: false },
+            { t: 'g', patch: false },
+            { t: 's', patch: false },
+            { t: 'Archive', patch: true },
+        ];
+        el.textContent = '';
+        const rand = rnRand('logo:' + parts.map(p => p.t).join(''));
+        parts.forEach((p, i) => {
+            if (p.patch) {
+                el.appendChild(rnPatch(p.t, 'rn-logo-word'));
+            } else {
+                const wrap = document.createElement('span');
+                wrap.className = 'rn-logo-letter';
+                const rot = (rand() * 12 - 6);
+                wrap.style.setProperty('--rot', rot.toFixed(2) + 'deg');
+                const inner = document.createElement('span');
+                inner.className = 'rn-c ' + RN_CLASSES[Math.floor(rand() * RN_CLASSES.length)] + ' rn-logo-ch';
+                inner.textContent = p.t;
+                wrap.appendChild(inner);
+                el.appendChild(wrap);
+            }
+            if (i < parts.length - 1 && p.patch === false && parts[i + 1].patch) {
+                el.appendChild(document.createTextNode(' '));
+            }
+        });
+    }
+
     document.querySelectorAll('.ransomify').forEach(buildRansom);
+    document.querySelectorAll('.ransomify-logo').forEach(buildLogoRansom);
+
+    // 0b. «Тонировка» вырезок палитрой конкретной афиши (killer feature).
+    //     Берём <img data-tint>, рисуем её на маленьком canvas, получаем
+    //     доминирующие цвета и красим paper/ink каждой буквы заголовка в тон
+    //     постера. Canvas может быть «грязным» из-за CORS — тогда молча
+    //     оставляем стандартную бумажную палитру сайта.
+    const RN_TINT_CACHE = new Map(); // url -> [ {paper, ink}, ... ] | null
+
+    function lum(r, g, b) { return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+
+    function extractPalette(img) {
+        try {
+            const W = 48, H = 64;                       // афиша ~3:4, деталей не нужно
+            const cv = document.createElement('canvas');
+            cv.width = W; cv.height = H;
+            const ctx = cv.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(img, 0, 0, W, H);
+            const data = ctx.getImageData(0, 0, W, H).data; // может бросить SecurityError (CORS)
+
+            // Квантование до 4 бит на канал — группируем похожие оттенки
+            const buckets = new Map();
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i + 3] < 128) continue;         // прозрачные пиксели
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+                let e = buckets.get(key);
+                if (!e) { e = { n: 0, r: 0, g: 0, b: 0 }; buckets.set(key, e); }
+                e.n++; e.r += r; e.g += g; e.b += b;
+            }
+            const sorted = [...buckets.values()].sort((a, b) => b.n - a.n);
+            if (!sorted.length) return null;
+
+            const out = [];
+            for (const e of sorted) {
+                const r = Math.round(e.r / e.n), g = Math.round(e.g / e.n), b = Math.round(e.b / e.n);
+                const l = lum(r, g, b);
+                if (l < 28 || l > 232) continue;         // почти чёрные/белые — это фон, не «краска»
+                const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+                if (mx - mn < 24) continue;              // серости
+                out.push({
+                    paper: `rgb(${r}, ${g}, ${b})`,
+                    ink: l > 140 ? 'rgb(12, 12, 18)' : 'rgb(248, 246, 236)',
+                });
+                if (out.length >= 6) break;
+            }
+            return out.length >= 2 ? out.slice(0, 5) : null;
+        } catch (_) {
+            return null;                                  // CORS / битая картинка — без тонировки
+        }
+    }
+
+    function applyTint(card, pal) {
+        const letters = card.querySelectorAll('.card-body h3 .rn-c, .detail-title .rn-c');
+        if (!letters.length) return;
+        const rand = rnRand('tint:' + (card.querySelector('[data-tint]')?.getAttribute('src') || ''));
+        letters.forEach(c => {
+            const p = pal[Math.floor(rand() * pal.length)];
+            c.style.background = p.paper;
+            c.style.color = p.ink;
+        });
+        card.classList.add('rn-tinted');
+    }
+
+    function tintCardFromPoster(card, img) {
+        const url = img.getAttribute('src');
+        if (RN_TINT_CACHE.has(url)) {
+            if (RN_TINT_CACHE.get(url)) applyTint(card, RN_TINT_CACHE.get(url));
+            return;
+        }
+        const run = () => {
+            const pal = extractPalette(img);
+            RN_TINT_CACHE.set(url, pal);
+            if (pal) applyTint(card, pal);
+        };
+        if (img.complete && img.naturalWidth) run();
+        else img.addEventListener('load', run, { once: true });
+    }
+
+    document.querySelectorAll('.poster-card, .poster-detail').forEach(card => {
+        const img = card.querySelector('img[data-tint]');
+        if (img) tintCardFromPoster(card, img);
+    });
 
     // 1. Navbar scroll effect (только если есть navbar)
     const navbar = document.getElementById('navbar');

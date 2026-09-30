@@ -9,24 +9,25 @@
     2. Прямой вызов из Python (manual): '{{ manual_test_url }}'
 </div>-->
 
+{% set ptitle = poster.caption | firstline %}
+
 <article class="detail poster-detail">
   <div class="detail-media">
     {% if poster.photo_file_id %}
       <img src="/api/poster-image/{{ poster.id }}" 
-           alt="{{ poster.caption | firstline }}" 
-           loading="lazy">
+           alt="{{ ptitle }}" 
+           loading="lazy" data-tint>
     {% else %}
-      <div class="poster-placeholder big">
-        <span>{{ poster.caption | firstline }}</span>
-      </div>
+      <div class="poster-placeholder big"><span class="ransomify rn-tiny" data-ransom="{{ ptitle }}">{{ ptitle }}</span></div>
     {% endif %}
   </div>
 
   <div class="detail-body">
-    <h1>{{ poster.caption | firstline }}</h1>
+    <!-- Заголовок-вырезка в стиле всего сайта (ransom note, набор рендерит main.js) -->
+    <!-- <h1 class="detail-title ransomify" data-ransom="{{ ptitle }}">{{ ptitle }}</h1> -->
 
     {% if poster.event_date %}
-      <p class="event-date">📅 {{ poster.event_date | ru_date }}</p>
+      <p class="event-date"> {{ poster.event_date | ru_date }}</p>
     {% endif %}
 
     {% if poster.caption %}

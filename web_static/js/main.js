@@ -54,7 +54,9 @@ document.addEventListener('DOMContentLoaded', () => {
             { t: 'Archive', patch: true },
         ];
         el.textContent = '';
-        const rand = rnRand('logo:' + parts.map(p => p.t).join(''));
+        // seed можно менять (например, 'logo:Gigs1335') — он подбирает
+        // комбинацию «бумага/краска» для каждой буквы детерминированно.
+        const rand = rnRand(el.getAttribute('data-ransom-seed') || ('logo:' + parts.map(p => p.t).join('')));
         parts.forEach((p, i) => {
             if (p.patch) {
                 el.appendChild(rnPatch(p.t, 'rn-logo-word'));
@@ -132,6 +134,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const letters = card.querySelectorAll('.card-body h3 .rn-c, .detail-title .rn-c');
         if (!letters.length) return;
         const rand = rnRand('tint:' + (card.querySelector('[data-tint]')?.getAttribute('src') || ''));
+        // Бумажная подложка рваного лоскута — в тон постера (красим даже без заголовка-вырезки)
+        const frame = card.querySelector('.scrap-frame');
+        if (frame && pal[0]) frame.style.setProperty('--scrap-bg', pal[0].paper);
+        if (!letters.length) return;
         letters.forEach(c => {
             const p = pal[Math.floor(rand() * pal.length)];
             c.style.background = p.paper;
@@ -155,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else img.addEventListener('load', run, { once: true });
     }
 
-    document.querySelectorAll('.poster-card, .poster-detail').forEach(card => {
+    document.querySelectorAll('.poster-card, .event-card, .poster-detail').forEach(card => {
         const img = card.querySelector('img[data-tint]');
         if (img) tintCardFromPoster(card, img);
     });
@@ -196,6 +202,35 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }, { threshold: 0.1 });
     revealElements.forEach(el => revealObserver.observe(el));
+    
+    
+    // 3b. «Рваные» афиши в сетке: рвём края poster img по псевдослучайному
+    // семенам (id карточки), как будто постер оторвали от стены. Детерминировано:
+    // одна карточка = один и тот же контур пореза при каждой загрузке.
+    function tornPolygon(rand, steps) {
+        // rand: функция [0,1); строим замкнутый обход по 4 сторонам прямоугольника.
+        // Контур описывает и рваную рамку-лист (::before), и картинку внутри —
+        // поэтому зубцы идут чуть внутрь от внешнего края рамки.
+        const pts = [];
+        const depth = 5;                                    // % глубины надкусов
+        const jag = () => (rand() * 0.75 + 0.25) * depth;   // 25–100% от глубины
+        const wobble = () => (rand() - 0.5) * 3;            // сдвиг точек вдоль края
+        for (let i = 0; i <= steps; i++) pts.push(`${(Math.min(99, Math.max(1, i / steps * 100 + wobble()))).toFixed(1)}% ${jag().toFixed(1)}%`);                    // top
+        for (let i = 1; i <= steps; i++) pts.push(`${(100 - jag()).toFixed(1)}% ${(Math.min(99, Math.max(1, i / steps * 100 + wobble()))).toFixed(1)}%`);          // right
+        for (let i = steps; i >= 0; i--) pts.push(`${(Math.min(99, Math.max(1, i / steps * 100 + wobble()))).toFixed(1)}% ${(100 - jag()).toFixed(1)}%`);          // bottom
+        for (let i = steps; i >= 1; i--) pts.push(`${jag().toFixed(1)}% ${(Math.min(99, Math.max(1, i / steps * 100 + wobble()))).toFixed(1)}%`);                  // left
+        return `polygon(${pts.join(', ')})`;
+    }
+    document.querySelectorAll('.scrap-frame').forEach(frame => {
+        const card = frame.closest('[data-scrap]');
+        const seed = 'scrap:' + ((card && card.getAttribute('data-scrap')) || Math.floor(Math.random() * 1e6));
+        const rand = rnRand(seed);
+        // Лёгкий наклон всей рамки-«лоскута»
+        frame.style.setProperty('--scrap-rot', ((rand() - 0.5) * 1.6).toFixed(2) + 'deg');
+        // ОДИН рваный контур на всю рамку: переменная --torn наследуется внутрь,
+        // её используют и ::before (бумага-рамка), и img (картинка) — края совпадают.
+        frame.style.setProperty('--torn', tornPolygon(rand, 8));
+    });
 
     // 4. Counter animation
     function animateCounter(element, target, duration = 2000) {

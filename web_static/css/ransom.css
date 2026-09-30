@@ -1,0 +1,901 @@
+/* ============================================================
+   Gigs Archive — Ransom Note / Grunge Skin (ransom.css)
+   Стиль, соответствующий основному логотипу:
+   вырезанные буквы, печатная машинка, коллаж/гранж-текстуры,
+   сырая андеграундная эстетика, музыкальное оборудование.
+
+   Палитра логотипа:
+     Жёлтый  #F4D03F (золото)   — основной акцент / «бумага»
+     Чёрный  #0A0A0F (глубокий) — фон
+     Зелёный #27AE60 (оливк.)   — «свежие» события, статусы
+     Красный #E74C3C (яркий)    — срочность, ошибки, ссылки
+     Белый   #FFFFFF            — текст / «вырезки»
+     Фиолет. #9B59B6 (акцент)   — статьи, интервью
+
+   Подключается ПОСЛЕ style.css и переопределяет его.
+   ============================================================ */
+
+:root {
+    /* --- палитра логотипа --- */
+    --gold: #F4D03F;
+    --gold-dark: #d4b417;
+    --ink: #0A0A0F;
+    --paper: #f5efdc;          /* состаренная бумага вырезок */
+    --paper-white: #fdfcf7;
+    --green: #27AE60;
+    --red: #E74C3C;
+    --purple: #9B59B6;
+    --tape: rgba(244, 208, 63, .38);      /* малярный скотч */
+    --tape-clear: rgba(255, 255, 255, .22);
+
+    /* --- переопределение старых переменных новым палитром --- */
+    --bg-primary: var(--ink);
+    --bg-secondary: #101018;
+    --bg-card: #14141d;
+    --bg-card-hover: #1a1a25;
+    --text-primary: #f2efe6;
+    --text-secondary: #b9b4a4;
+    --text-muted: #7c7869;
+    --accent-orange: var(--gold);         /*compat*/
+    --accent-pink: var(--red);            /*compat*/
+    --accent-purple: var(--purple);       /*compat*/
+    --gradient-main: linear-gradient(135deg, var(--gold) 0%, var(--red) 50%, var(--purple) 100%);
+    --border-color: rgba(244, 208, 63, .22);
+    --shadow-card: 5px 6px 0 rgba(0, 0, 0, .55);
+    --shadow-glow: 0 0 0 transparent;
+
+    /* --- шрифты: печатная машинка + трафарет + газетный грифоновый --- */
+    --font-type: 'Special Elite', 'Courier New', Courier, monospace;
+    --font-stencil: 'Rubik Mono One', Impact, 'Arial Black', sans-serif;
+    --font-cut: 'Anton', Impact, 'Haettenschweiler', sans-serif;
+    --font-news: 'Playfair Display', Georgia, 'Times New Roman', serif;
+
+    /* гранж-зерно (SVG-шум, без внешних файлов) */
+    --grain-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+/* ============ БАЗА: тёмная сцена + зерно + «стена» ============ */
+body {
+    font-family: var(--font-type);
+    background:
+        radial-gradient(ellipse at 20% 0%, rgba(155, 89, 182, .07), transparent 45%),
+        radial-gradient(ellipse at 85% 100%, rgba(231, 76, 60, .06), transparent 45%),
+        var(--ink);
+    color: var(--text-primary);
+    letter-spacing: .01em;
+}
+
+/* Зернистая гранж-текстура поверх всего сайта */
+.bg-animation::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: var(--grain-url);
+    background-repeat: repeat;
+    opacity: .05;
+    mix-blend-mode: overlay;
+    animation: none;
+    pointer-events: none;
+    z-index: 9999;
+}
+
+h1, h2, h3, .section-title, .step-title, .cta-title, .card-body h3,
+.article-title, .event-card-title, .detail-body h1 {
+    font-family: var(--font-cut);
+    font-weight: 400;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+}
+
+a { transition: color .15s steps(2), transform .15s ease; }
+
+/* ============ RANSOM NOTE — наборы букв ============ */
+.rn-word { display: inline-block; white-space: nowrap; line-height: 1.05; }
+.rn-chars { display: inline-flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: .04em; vertical-align: bottom; }
+.rn-c {
+    display: inline-block;
+    padding: .02em .12em .06em;
+    margin: .02em .03em;
+    border-radius: 1px 3px 2px 4px;
+    transform-origin: 50% 60%;
+    box-shadow: 2px 3px 0 rgba(0, 0, 0, .6);
+    text-shadow: none;
+    -webkit-text-fill-color: currentColor; /* отмена градиентного clip из style.css */
+    background: none;
+}
+.rn-a { background: var(--paper); color: #14141c; font-family: var(--font-cut); transform: rotate(-4deg) translateY(2px); }
+.rn-b { background: var(--gold); color: #17130a; font-family: var(--font-stencil); transform: rotate(3deg) scale(.92); }
+.rn-c3 { background: var(--red); color: #fff; font-family: var(--font-type); transform: rotate(-2deg) translateY(-2px) skewX(-4deg); }
+.rn-d { background: var(--purple); color: #f4eefb; font-family: var(--font-news); font-style: italic; font-weight: 800; transform: rotate(5deg) scale(1.06); }
+.rn-e { background: #101018; color: var(--green); border: 2px dashed var(--green); font-family: var(--font-type); font-weight: 700; transform: rotate(-6deg); box-shadow: 2px 3px 0 rgba(0,0,0,.5); }
+.rn-f { background: var(--green); color: #08130c; font-family: var(--font-cut); transform: rotate(2deg) translateY(1px) scale(.95); }
+.rn-g { background: var(--paper-white); color: var(--red); border: 2px solid var(--ink); font-family: var(--font-news); font-weight: 900; transform: rotate(-3deg) scale(1.04); }
+.rn-h { background: #201431; color: var(--gold); font-family: var(--font-stencil); transform: rotate(4deg) translateY(-1px); }
+
+/* 9-я вырезка: золотая краска на красной бумаге (для лого: G — «золотой на красном») */
+.rn-i { background: var(--red); color: var(--gold); font-family: var(--font-stencil); font-weight: 900; transform: rotate(-3deg) scale(1.02); }
+
+/* Точные цвета букв логотипа независимо от seed:
+   G — золото на красном, i — светлое на тёмно-сером, g — тёмное на светлом,
+   s — белое на красном, «Archive» — чёрная краска. */
+.rn-logo-letter:nth-child(1) .rn-logo-ch { background: var(--red);    color: var(--gold); }
+.rn-logo-letter:nth-child(2) .rn-logo-ch { background: #2b2b36;       color: #f5efdc; }
+.rn-logo-letter:nth-child(3) .rn-logo-ch { background: var(--paper);  color: #14141c; }
+.rn-logo-letter:nth-child(4) .rn-logo-ch { background: var(--red);    color: #fff; }
+.rn-logo-word { color: #000; }
+
+/* Слово целиком на «лоскуте бумаги», как приклеенное */
+.rn-paper {
+    display: inline-block;
+    background: var(--paper);
+    color: #14141c;
+    font-family: var(--font-cut);
+    padding: .05em .35em .1em;
+    transform: rotate(-1.5deg);
+    box-shadow: 3px 4px 0 rgba(0, 0, 0, .6);
+    clip-path: polygon(1% 4%, 99% 0%, 97% 97%, 3% 100%);
+}
+.rn-dark {
+    display: inline-block;
+    background: var(--ink);
+    color: var(--gold);
+    font-family: var(--font-type);
+    padding: .05em .3em .1em;
+    transform: rotate(1.5deg);
+    border: 2px solid var(--gold);
+    box-shadow: 3px 4px 0 rgba(0, 0, 0, .6);
+}
+
+/* Кусочки скотча */
+.tape { position: relative; }
+.tape::before, .tape::after {
+    content: '';
+    position: absolute;
+    width: 64px; height: 20px;
+    background: var(--tape);
+    border-left: 1px dashed rgba(0,0,0,.25);
+    border-right: 1px dashed rgba(0,0,0,.25);
+    top: -10px; left: 12%;
+    transform: rotate(-6deg);
+    pointer-events: none;
+    mix-blend-mode: screen;
+}
+.tape::after { left: auto; right: 10%; top: auto; bottom: -8px; transform: rotate(4deg); width: 52px; height: 17px; }
+
+/* Шов «рваной бумаги» для секций */
+.jagged-edge {
+    height: 14px;
+    background: var(--paper);
+    -webkit-mask: repeating-linear-gradient(135deg, #000 0 6px, transparent 6px 12px);
+    mask: repeating-linear-gradient(135deg, #000 0 6px, transparent 6px 12px);
+    opacity: .12;
+}
+
+/* ============ НАВИГАЦИЯ ============ */
+.navbar {
+    background: rgba(10, 10, 15, .92) !important;
+    backdrop-filter: blur(4px);
+    border-bottom: 3px double var(--gold) !important;
+    box-shadow: 0 4px 0 rgba(0, 0, 0, .5);
+    font-family: var(--font-type);
+}
+.nav-logo { font-family: var(--font-stencil); font-size: 1.05rem; letter-spacing: .04em; }
+.nav-logo-img {
+    width: 44px; height: 44px;
+    border-radius: 2px !important;              /* не круглый — как вырезка */
+    border: 2px solid var(--paper) !important;
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, .7);
+    transform: rotate(-3deg);
+    object-fit: cover;
+}
+.nav-logo:hover .nav-logo-img { transform: rotate(2deg) scale(1.05); }
+.nav-links { gap: 1.4rem; }
+.nav-links a {
+    color: var(--text-primary);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    font-size: .85rem;
+    padding: .25rem .55rem;
+    background: transparent;
+}
+.nav-links a::after { display: none; }
+.nav-links a:hover { color: var(--ink); background: var(--gold); transform: rotate(-1deg); }
+.nav-links a.active { color: var(--ink); background: var(--gold); box-shadow: 2px 2px 0 var(--red); }
+.nav-telegram { color: var(--gold) !important; border: 1px dashed var(--gold); }
+.nav-telegram:hover { background: var(--gold) !important; color: var(--ink) !important; border-style: solid; }
+.nav-admin { color: var(--red) !important; }
+.mobile-menu-btn { color: var(--gold); }
+
+@media (max-width: 768px) {
+    .nav-links { background: rgba(10, 10, 15, .98); border-bottom: 3px double var(--gold); }
+}
+
+/* ============ HERO — афиша на стене ============ */
+.hero { min-height: auto; padding-top: 130px !important; padding-bottom: 40px !important; }
+.hero-container { max-width: 1000px; }
+
+.hero-badge {
+    display: inline-block;
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: 0;
+    font-family: var(--font-type);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    font-size: .72rem;
+    padding: .45rem 1rem;
+    transform: rotate(-2deg);
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, .6);
+    animation: stampIn .4s steps(3) both;
+}
+.hero-badge-dot { background: var(--gold); border-radius: 0; width: 9px; height: 9px; transform: rotate(45deg); }
+
+.hero-title {
+    font-family: var(--font-cut);
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+    -webkit-text-fill-color: unset !important;
+    color: var(--text-primary);
+    margin-bottom: 1.8rem;
+    line-height: 1.15;
+}
+.hero-description {
+    font-family: var(--font-type);
+    color: var(--paper);
+    background: rgba(20, 20, 29, .8);
+    border-left: 6px solid var(--gold);
+    padding: 1rem 1.2rem;
+    transform: rotate(-.4deg);
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, .5);
+    font-size: 1rem;
+    line-height: 1.8;
+}
+
+/* Логотип в hero — не аватарка, а «приклеенная вырезка» */
+.hero-circle-image {
+    width: 240px; height: 240px;
+    border-radius: 2px !important;
+    border: 4px solid var(--paper) !important;
+    outline: 2px solid var(--ink);
+    box-shadow: 8px 10px 0 rgba(0, 0, 0, .65) !important;
+    transform: rotate(3deg);
+    object-fit: cover;
+    background: var(--ink);
+}
+.hero-circle-image:hover { transform: rotate(-2deg) scale(1.03); }
+.hero-image-wrapper { position: relative; }
+.hero-image-wrapper::before {           /* второй кусок скотча поверх угла */
+    content: '';
+    position: absolute;
+    top: -12px; right: 8%;
+    width: 90px; height: 26px;
+    background: var(--tape);
+    transform: rotate(7deg);
+    border-left: 1px dashed rgba(0,0,0,.3);
+    border-right: 1px dashed rgba(0,0,0,.3);
+    mix-blend-mode: screen;
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* Статистика — штампы на бумаге */
+.hero-stats { border-top: 3px double var(--gold); gap: 2rem; }
+.stat-item {
+    background: var(--paper);
+    color: #14141c;
+    padding: .8rem 1.4rem;
+    transform: rotate(-1deg);
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, .6);
+    border: 2px solid var(--ink);
+    clip-path: polygon(0 2%, 100% 0, 98% 100%, 2% 98%);
+}
+.stat-item:nth-child(2) { transform: rotate(1.4deg); }
+.stat-number {
+    font-family: var(--font-stencil);
+    font-size: 2.2rem;
+    background: none !important;
+    -webkit-text-fill-color: var(--red) !important;
+    color: var(--red) !important;
+}
+.stat-label { color: #4a4636; font-family: var(--font-type); letter-spacing: .14em; }
+
+/* ============ КНОПКИ — штампы / наклейки ============ */
+.btn {
+    border-radius: 0 !important;
+    font-family: var(--font-type) !important;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    border: 2px solid var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+    transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+    overflow: visible;
+}
+.btn::before { display: none; }
+.btn-primary {
+    background: var(--gold) !important;
+    color: #17130a !important;
+    box-shadow: 4px 4px 0 rgba(231, 76, 60, .85);
+}
+.btn-primary:hover { transform: translate(-2px, -2px) rotate(-.5deg); box-shadow: 7px 7px 0 rgba(231, 76, 60, .85); }
+.btn-primary:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 rgba(231, 76, 60, .85); }
+.btn-secondary {
+    background: transparent !important;
+    color: var(--paper) !important;
+    border: 2px dashed var(--paper) !important;
+    box-shadow: none;
+}
+.btn-secondary:hover { border-style: solid; background: var(--paper) !important; color: var(--ink) !important; transform: rotate(.6deg); }
+
+/* ============ СЕКЦИИ ============ */
+.section { padding: 4.5rem 2rem; }
+.how-it-works, section[style*="bg-secondary"] {
+    background: var(--bg-secondary) !important;
+    border-top: 3px double var(--gold) !important;
+    border-bottom: 3px double var(--gold) !important;
+}
+.section-header { margin-bottom: 2.4rem; }
+.section-title {
+    font-size: 2rem;
+    display: inline-block;
+    background: var(--gold);
+    color: var(--ink);
+    padding: .1em .45em .15em;
+    transform: rotate(-1.2deg);
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, .6);
+    clip-path: polygon(1% 6%, 99% 0, 97% 92%, 2% 100%);
+}
+.section-link {
+    font-family: var(--font-type);
+    color: var(--gold) !important;
+    text-transform: lowercase;
+    letter-spacing: .04em;
+    border-bottom: 2px dashed var(--gold);
+    border-radius: 0;
+}
+.section-link:hover { color: var(--red) !important; border-bottom-color: var(--red); transform: rotate(-1deg); }
+
+/* ============ КАРТОЧКИ — вырезки из журналов ============ */
+.card, .event-card, .article-card {
+    background: var(--bg-card) !important;
+    border: 2px solid var(--paper) !important;
+    border-radius: 0 !important;
+    box-shadow: 6px 7px 0 rgba(0, 0, 0, .55) !important;
+    transform: rotate(var(--tilt, 0deg));
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.event-card { --tilt: -.6deg; }
+.article-card { --tilt: .5deg; }
+.card:hover, .event-card:hover, .article-card:hover {
+    transform: rotate(0deg) translateY(-5px) !important;
+    border-color: var(--gold) !important;
+    box-shadow: 9px 12px 0 rgba(0, 0, 0, .6) !important;
+}
+
+.poster-thumb, .event-card-image { background: #0d0d14 !important; border-bottom: 2px solid var(--paper); aspect-ratio: 3/4; }
+.poster-thumb img, .event-card-image img { image-rendering: auto; filter: contrast(1.03) saturate(.96); }
+/* Рваные лоскуты (см. блок «РВВАЯ РАМКА») не наследуют тёмный фон и border
+   строки выше — у них своя бумажная рамка-подложка */
+.scrap-frame { background: transparent !important; border: none !important; }
+
+
+.date-badge, .event-date-badge {
+    border-radius: 0 !important;
+    background: var(--gold) !important;
+    color: var(--ink) !important;
+    font-family: var(--font-stencil);
+    font-size: .72rem !important;
+    padding: .3rem .6rem !important;
+    border: 2px solid var(--ink);
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, .65);
+    transform: rotate(-3deg);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+/* Прошедшие события — «погашено» красным штампом */
+.event-tag {
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: var(--green) !important;
+    border: 2px solid var(--green);
+    font-family: var(--font-type);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    transform: rotate(-2deg);
+    padding: .2rem .6rem;
+}
+.event-card .event-tag[style], .event-tag[style] {
+    color: var(--red) !important;
+    border-color: var(--red);
+    background: transparent !important;
+}
+
+/* Статьи — категории как цветные лоскуты */
+.kind, .article-category {
+    border-radius: 0 !important;
+    font-family: var(--font-type);
+    font-weight: 700;
+    letter-spacing: .12em;
+    transform: rotate(-1.5deg);
+    display: inline-block;
+    background: var(--gold) !important;
+    color: var(--ink) !important;
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 rgba(0,0,0,.6);
+    padding: .25rem .6rem !important;
+}
+.kind-interview { background: var(--purple) !important; color: #fff !important; }
+.kind-review { background: var(--red) !important; color: #fff !important; }
+.article-placeholder {
+    background: repeating-linear-gradient(-45deg, #14141d 0 12px, #171722 12px 24px) !important;
+    color: var(--gold) !important;
+    font-family: var(--font-stencil);
+    letter-spacing: .12em;
+}
+.article-footer { border-top: 2px dashed rgba(245, 239, 220, .25); }
+.article-read-more { color: var(--gold) !important; font-family: var(--font-type); }
+.article-read-more:hover { color: var(--red) !important; }
+
+/* ============ КАК ЭТО РАБОТАЕТ — нумерация гига ============ */
+.step-card {
+    background: var(--paper);
+    color: #14141c;
+    border: 2px solid var(--ink);
+    box-shadow: 6px 7px 0 rgba(0, 0, 0, .55);
+    border-radius: 0;
+    transform: rotate(-1deg);
+    position: relative;
+}
+.step-card:nth-child(2) { transform: rotate(1.2deg); }
+.step-card:nth-child(3) { transform: rotate(-.6deg); }
+.step-icon {
+    background: var(--gold);
+    border: 2px solid var(--ink) !important;
+    border-radius: 0 !important;
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, .5);
+    transform: rotate(4deg);
+    width: 56px; height: 56px;
+}
+.step-number {
+    font-family: var(--font-stencil);
+    color: var(--red);
+    font-size: .95rem;
+    letter-spacing: .1em;
+}
+.step-title { color: var(--ink); font-size: 1.25rem; }
+.step-description { color: #3d3a2e; font-family: var(--font-type); }
+
+/* Кабель между шагами — как патч-корд */
+.steps-grid { position: relative; }
+.steps-grid::before {
+    content: '';
+    position: absolute;
+    top: 46px; left: 6%; right: 6%;
+    height: 4px;
+    background: repeating-linear-gradient(90deg, var(--red) 0 18px, #7c1f16 18px 22px);
+    border-radius: 2px;
+    opacity: .55;
+    z-index: 0;
+}
+.step-card { z-index: 1; }
+
+/* ============ CTA — плакат на столбе ============ */
+.cta-box {
+    background:
+        var(--grain-url),
+        linear-gradient(160deg, #17130a 0%, #241a05 40%, #14141d 100%) !important;
+    border: 3px solid var(--gold) !important;
+    border-radius: 0 !important;
+    box-shadow: 8px 10px 0 rgba(0, 0, 0, .6);
+    transform: rotate(-.4deg);
+}
+.cta-box::before { display: none; }
+.cta-title {
+    font-family: var(--font-cut);
+    color: var(--paper);
+    font-size: 2.2rem;
+}
+.cta-description { font-family: var(--font-type); color: var(--text-secondary); }
+
+/* ============ ВНУТРЕННИЕ СТРАНИЦЫ ============ */
+.page-head h1 {
+    font-family: var(--font-cut);
+    font-size: 2.6rem;
+    display: inline-block;
+    background: var(--red);
+    color: #fff;
+    padding: .1em .5em .12em;
+    transform: rotate(-1deg);
+    box-shadow: 5px 5px 0 rgba(0, 0, 0, .6);
+    clip-path: polygon(2% 0, 100% 3%, 98% 100%, 0 96%);
+}
+.page-head .muted, .muted { font-family: var(--font-type); color: var(--text-secondary); }
+
+.search input {
+    border-radius: 0 !important;
+    border: 2px solid var(--paper) !important;
+    background: var(--paper) !important;
+    color: var(--ink) !important;
+    font-family: var(--font-type);
+    box-shadow: 4px 4px 0 rgba(0, 0, 0, .5);
+}
+.search input::placeholder { color: #6b6650; }
+
+.tab {
+    border-radius: 0 !important;
+    border: 2px solid var(--text-muted) !important;
+    color: var(--text-secondary);
+    font-family: var(--font-type);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    font-size: .78rem;
+    background: transparent;
+    transform: rotate(-.5deg);
+}
+.tab:nth-child(2n) { transform: rotate(.7deg); }
+.tab.active, .tab:hover {
+    background: var(--gold) !important;
+    color: var(--ink) !important;
+    border-color: var(--ink) !important;
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, .6);
+}
+
+.pagination { font-family: var(--font-type); }
+.pagination a {
+    color: var(--gold) !important;
+    border: 2px dashed var(--gold);
+    padding: .3rem .8rem;
+}
+.pagination a:hover { background: var(--gold); color: var(--ink); border-style: solid; }
+
+/* Детальные страницы */
+.detail-media img {
+    border-radius: 0 !important;
+    border: 4px solid var(--paper) !important;
+    box-shadow: 10px 12px 0 rgba(0, 0, 0, .6) !important;
+    transform: rotate(-1deg);
+}
+.detail-body h1 {
+    background: none !important;
+    -webkit-text-fill-color: unset !important;
+    color: var(--paper);
+    font-size: 2rem;
+}
+.event-date { font-family: var(--font-type); color: var(--gold); }
+.caption-card {
+    background: var(--paper) !important;
+    border: 2px solid var(--ink) !important;
+    border-radius: 0 !important;
+    box-shadow: 6px 7px 0 rgba(0, 0, 0, .55);
+    transform: rotate(.3deg);
+}
+.caption-body { color: #1c1a12; font-family: var(--font-type); }
+.caption-body a { color: var(--red); }
+.caption-body a:hover { color: var(--purple); }
+.caption-body b, .caption-body strong { color: #000; }
+.meta.muted { font-family: var(--font-type); }
+
+.article-cover-img img, .article-cover img { border: 3px solid var(--paper); border-radius: 0; box-shadow: 6px 7px 0 rgba(0,0,0,.55); }
+
+/* Статья в полном тексте */
+.article-body, article .caption-body { font-family: var(--font-type); }
+
+/* ============ ФУТЕР ============ */
+.site-footer, .footer {
+    border-top: 3px double var(--gold) !important;
+    background: #08080c;
+    font-family: var(--font-type);
+}
+.site-footer a, .footer-links a { color: var(--gold); }
+.site-footer a:hover, .footer-links a:hover { color: var(--red); }
+.footer-left { color: var(--text-muted); }
+
+/* ============ 404 / EMPTY ============ */
+.empty { font-family: var(--font-type); color: var(--text-secondary); }
+.empty h1, .empty.center h1 {
+    font-family: var(--font-stencil);
+    font-size: 5rem;
+    color: var(--red);
+    text-shadow: 4px 4px 0 var(--gold), 8px 8px 0 rgba(0,0,0,.7);
+    transform: rotate(-3deg);
+    display: inline-block;
+}
+.empty.center p { font-size: 1.05rem; color: var(--paper); }
+
+/* ============ АНИМАЦИИ: резкие, «stepped», как кадры ксерокса ============ */
+@keyframes stampIn { from { transform: scale(1.6) rotate(-8deg); opacity: 0; } to { transform: scale(1) rotate(-2deg); opacity: 1; } }
+.reveal { transition: all .45s cubic-bezier(.2, .9, .3, 1.3); }
+html { scroll-behavior: auto; }
+
+/* Отключаем плавный 3D-tilt JS на карточках — вместо него лёгкий сдвиг */
+.event-card[style], .article-card[style], .card[style] { will-change: transform; }
+
+/* ============ ADMIN — тот же дух, но строже ============ */
+.admin-body { background: var(--ink) !important; font-family: var(--font-type); }
+.admin-header .logo { color: var(--gold) !important; font-family: var(--font-stencil); }
+.login-box, .stat, .table, .caption-card { border-radius: 0 !important; }
+.login-box {
+    background: var(--paper) !important;
+    color: var(--ink) !important;
+    border: 3px solid var(--ink) !important;
+    box-shadow: 8px 9px 0 rgba(0, 0, 0, .65) !important;
+    transform: rotate(-.6deg);
+}
+.login-box h1 { font-family: var(--font-cut); text-transform: uppercase; color: var(--ink); }
+.login-box label { color: #2a2718; }
+.login-box input, .article-form input, .article-form textarea, .article-form select {
+    border-radius: 0 !important;
+    border: 2px solid var(--ink) !important;
+    background: #fffdf4 !important;
+    color: var(--ink) !important;
+    font-family: var(--font-type) !important;
+    box-shadow: 3px 3px 0 rgba(0,0,0,.4);
+}
+.article-form label { font-family: var(--font-type); color: var(--gold); text-transform: uppercase; letter-spacing: .08em; font-size: .85rem; }
+.stat-cards .stat { background: var(--bg-card) !important; border: 2px solid var(--paper) !important; box-shadow: 4px 5px 0 rgba(0,0,0,.5); }
+.stat span { font-family: var(--font-stencil); color: var(--gold) !important; }
+.stat.ok span { color: var(--green) !important; }
+.stat.warn span { color: var(--red) !important; }
+.stat label { font-family: var(--font-type); }
+.table { background: var(--bg-card) !important; border: 2px solid var(--paper) !important; }
+.table th { color: var(--gold) !important; font-family: var(--font-type); letter-spacing: .1em; border-bottom: 2px solid var(--gold) !important; }
+.table td { border-bottom: 1px dashed rgba(245, 239, 220, .18) !important; }
+.badge { border-radius: 0 !important; font-family: var(--font-type); border: 1px solid currentColor; }
+.badge-ok { background: rgba(39, 174, 96, .15) !important; color: var(--green) !important; }
+.badge-draft { background: rgba(244, 208, 63, .12) !important; color: var(--gold) !important; }
+.flash-ok { background: rgba(39,174,96,.18) !important; color: var(--green) !important; border: 2px solid var(--green); }
+.flash-error { background: rgba(231,76,60,.15) !important; color: var(--red) !important; border: 2px solid var(--red); }
+.site-header nav a { font-family: var(--font-type); text-transform: uppercase; letter-spacing: .05em; font-size: .85rem; }
+.site-header nav a:hover, .site-header nav a.active { color: var(--gold); }
+
+/* ============ Скроллбар под тему ============ */
+::-webkit-scrollbar-track { background: var(--ink); }
+::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 0; border: 2px solid var(--ink); }
+::selection { background: var(--gold); color: var(--ink); }
+
+/* ============ Мобильные ============ */
+@media (max-width: 768px) {
+    .hero { padding-top: 110px !important; }
+    .hero-circle-image { width: 180px; height: 180px; }
+    .section-title { font-size: 1.5rem; }
+    .page-head h1 { font-size: 1.9rem; }
+    .steps-grid::before { display: none; }
+}
+
+/* ============ ЛОГОТИП «G i g s | Archive» (увеличенный ransom-логотип) ============
+   Первые 4 буквы — отдельные «вырезки», слово Archive — один общий лоскут бумаги.
+   HTML в base.html/index.html уже содержит нужную разметку (работает и без JS),
+   main.js лишь пересобирает её с детерминированными поворотами/шрифтами. */
+.nav-logo { gap: .8rem; }
+.nav-logo-text {
+    display: inline-flex;
+    align-items: center;
+    gap: .16em;
+    font-size: 1.55rem;            /* было ~1.05rem — стал заметно крупнее */
+    line-height: 1;
+    white-space: nowrap;
+}
+.rn-logo-cut {
+    display: inline-block;
+    padding: .06em .18em .1em;
+    border-radius: 2px 4px 3px 5px;
+    transform: rotate(var(--rot, -2deg));
+    box-shadow: 2px 3px 0 rgba(0, 0, 0, .65);
+    text-transform: none;          /* НЕ капс — как на реальной вырезке */
+    letter-spacing: 0;
+    color: #14141c;
+    background: var(--paper);
+    font-family: var(--font-cut);
+    -webkit-text-fill-color: currentColor;
+}
+.rn-logo-letter { font-size: 1.05em; }
+.rn-logo-word {
+    /* «Archive» — одна цельная бумажка со складкой посередине */
+    position: relative;
+    margin-left: .28em;
+    padding: .08em .4em .12em;
+    --rot: 1.5deg;
+    clip-path: polygon(1% 5%, 99% 0, 97% 95%, 3% 100%);
+    background: linear-gradient(105deg, var(--paper) 0 46%, #e7e0c8 46% 54%, var(--paper-white) 54% 100%);
+    font-family: var(--font-news);
+    font-weight: 900;
+    font-style: italic;
+}
+.nav-logo:hover .rn-logo-letter { transform: rotate(calc(var(--rot, -2deg) * -1.5)) translateY(-1px); }
+.nav-logo:hover .rn-logo-word   { transform: rotate(-1deg) scale(1.03); }
+.rn-logo-cut { transition: transform .15s ease; }
+
+@media (max-width: 768px) {
+    .nav-logo-text { font-size: 1.25rem; }
+}
+
+/* ============ ЗАГОЛОВКИ АФИШ — тот же ransom-стиль, что и весь сайт ============
+   Раньше в _poster_card.html / poster_detail.html был просто капс Anton;
+   теперь они собираются из «вырезанных букв» (.ransomify + main.js). */
+.detail-title.ransomify {
+    font-size: clamp(1.7rem, 4vw, 2.6rem);
+    line-height: 1.35;
+    margin-bottom: 1rem;
+}
+.card-body h3.ransomify {
+    font-size: 1.05rem;
+    line-height: 1.5;
+    margin-bottom: .6rem;
+    -webkit-line-clamp: unset;     /* набор не режем multiline-климпом */
+    overflow: visible;
+}
+.poster-placeholder .rn-tiny {
+    display: inline-block;
+    max-width: 100%;
+    color: inherit;
+    font-weight: inherit;
+}
+/* Внутри плейсхолдера вырезки чуть мельче, чтобы влезали 3–4 строки */
+.rn-tiny .rn-c { font-size: .82em; box-shadow: 1px 2px 0 rgba(0, 0, 0, .55); }
+.rn-tiny .rn-word { vertical-align: baseline; }
+
+/* Fallback без JavaScript: хотя бы «бумажные» заголовки вместо голого UPPERCASE */
+body.js-off .card-body h3:not(.rn-ready),
+body.js-off .detail-title:not(.rn-ready) {
+    display: inline-block;
+    background: var(--gold);
+    color: var(--ink);
+    padding: .05em .35em .1em;
+    transform: rotate(-1deg);
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, .6);
+    clip-path: polygon(1% 5%, 99% 0, 97% 96%, 3% 100%);
+}
+body.js-off .poster-placeholder span {
+    color: var(--gold);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+
+/* ============ Тонировка вырезок палитрой афиши (main.js, data-tint) ============
+   Когда JS вытащил доминирующие цвета из poster img, он красит .rn-c в тон
+   постера и вешает на карточку класс .rn-tinted — буквы «проявляются» с лёгким
+   fade, оставаясь читаемыми за счёт контрастного ink + мягкой тени. */
+.card-body h3 .rn-c,
+.detail-title .rn-c {
+    transition: background-color .45s ease, color .45s ease;
+}
+.poster-card.rn-tinted .card-body h3 .rn-c,
+.poster-detail.rn-tinted .detail-title .rn-c {
+    box-shadow: 2px 3px 0 rgba(0, 0, 0, .45);
+}
+
+
+/* ============ «Рваные» афиши в сетке (лоскуты, приклеенные к стене) ============
+   Карточки событий (.event-card[data-scrap]) и постеры (/posters, scrap-N)
+   получают неровную посадку в сетке; JS (main.js, tornPolygon) дополнительно
+   рвёт края самой картинки детерминированным clip-path по seed карточки. */
+
+/* Неровная «кидальная» сетка: колонки чуть шире карточек + лёгкий сдвиг ряда */
+.events-grid { row-gap: 2.1rem; }
+.events-grid .event-card { margin-top: calc(var(--scrap-shift, 0px)); }
+.events-grid .event-card:nth-child(3n+2) { --scrap-shift: 14px; }
+.events-grid .event-card:nth-child(3n+3) { --scrap-shift: -8px; }
+
+/* Наклон лоскутов-карточек (псевдо-CSS для /posters, seed = id % 6) */
+.event-card, .poster-card { transition: transform .4s ease, box-shadow .4s ease; }
+.event-card:nth-child(4n+1), .poster-card.scrap-0 { transform: rotate(-.9deg); }
+.event-card:nth-child(4n+2), .poster-card.scrap-1 { transform: rotate(.7deg); }
+.event-card:nth-child(4n+3), .poster-card.scrap-2 { transform: rotate(-.5deg); }
+.event-card:nth-child(4n),   .poster-card.scrap-3 { transform: rotate(1.1deg); }
+.poster-card.scrap-4 { transform: rotate(-1.2deg); }
+.poster-card.scrap-5 { transform: rotate(.4deg); }
+/* Hover выпрямляет лоскут и приподнимает его со «скотчем-тенью» */
+.event-card:hover, .poster-card:hover { transform: rotate(0deg) translateY(-4px); }
+
+
+/* ============ «Рваные» афиши в сетке (лоскуты, приклеенные к стене) ============
+   Карточки событий (.event-card[data-scrap]) и постеры (/posters, scrap-N)
+   получают неровную посадку в сетке; JS (main.js, tornPolygon) дополнительно
+   рвёт края самой картинки детерминированным clip-path по seed карточки. */
+
+/* Неровная «кидальная» сетка: колонки чуть шире карточек + лёгкий сдвиг ряда */
+.events-grid { row-gap: 2.1rem; }
+.events-grid .event-card { margin-top: calc(var(--scrap-shift, 0px)); }
+.events-grid .event-card:nth-child(3n+2) { --scrap-shift: 14px; }
+.events-grid .event-card:nth-child(3n+3) { --scrap-shift: -8px; }
+
+/* Наклон лоскутов-карточек (псевдо-CSS для /posters, seed = id % 6) */
+.event-card, .poster-card { transition: transform .4s ease, box-shadow .4s ease; }
+.event-card:nth-child(4n+1), .poster-card.scrap-0 { transform: rotate(-.9deg); }
+.event-card:nth-child(4n+2), .poster-card.scrap-1 { transform: rotate(.7deg); }
+.event-card:nth-child(4n+3), .poster-card.scrap-2 { transform: rotate(-.5deg); }
+.event-card:nth-child(4n),   .poster-card.scrap-3 { transform: rotate(1.1deg); }
+.poster-card.scrap-4 { transform: rotate(-1.2deg); }
+.poster-card.scrap-5 { transform: rotate(.4deg); }
+/* Hover выпрямляет лоскут и приподнимает его со «скотчем-тенью» */
+.event-card:hover, .poster-card:hover { transform: rotate(0deg) translateY(-4px); }
+
+/* РВВАЯ РАМКА ВОКРУГ КАРТИНКИ.
+   Раньше рамка была прямоугольной коробкой с overflow:hidden, внутри которой
+   резалась картинка — получался «квадрат с изжеванным фото», а не рваный лист.
+   Теперь режем саму рамку (.scrap-frame): она становится лоскутом бумаги,
+   а картинка внутри остаётся целой и просто следует за рваным силуэтом.
+   Контур вешается на ::before (фон-бумага + тень) и на img/плейсхолдер через
+   CSS-переменную --torn (её задаёт JS tornPolygon; без JS — запасной контур). */
+/* Единый рваный контур — в CSS-переменной, наследуется внутрь рамки */
+/* :root {
+    --torn: polygon(2% 3%, 14% 1%, 30% 4%, 47% 1%, 63% 5%, 80% 2%, 93% 4%, 98% 8%, 96% 24%, 99% 41%, 95% 58%, 98% 75%, 96% 92%, 91% 97%, 74% 94%, 55% 98%, 37% 95%, 20% 98%, 6% 95%, 1% 90%, 4% 72%, 1% 54%, 3% 36%, 1% 18%);
+} */
+/*
+.scrap-frame {
+    position: relative;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0;
+    background: transparent !important;
+    overflow: visible !important;      
+    aspect-ratio: 3 / 4;               
+    transform: rotate(var(--scrap-rot, 0deg));
+    transition: transform .4s ease;
+}
+*/
+/* Слой «бумаги-рамки»: рваный лист, из-под которого по периметру картинки
+   торчит неровная кромка (поля clip = ширина рваной рамки ~6px) */
+/*.scrap-frame::before {
+    content: "";
+    position: absolute;
+    inset: -6px -6px -8px -6px;        
+    z-index: 0;
+    background: var(--paper, #efe7d2);
+    clip-path: var(--torn);
+    box-shadow: 3px 5px 12px rgba(0, 0, 0, .55);
+    transition: clip-path .35s ease, background-color .45s ease;
+}
+*/
+/* Бумажную рамку тонируем в доминирующий цвет постера (tint-скрипт, seed по URL) */
+/*.event-card.rn-tinted .scrap-frame::before,
+.poster-card.rn-tinted .scrap-frame::before { background: var(--scrap-bg, var(--paper, #efe7d2)); }
+
+.scrap-frame img,
+.scrap-frame > div:first-child {
+    position: relative;
+    z-index: 1;
+    display: block; width: 100%; height: 100%; object-fit: cover;
+    aspect-ratio: auto;
+    clip-path: var(--torn);            
+    filter: contrast(1.03) saturate(.96);
+    transform: none;
+    transition: clip-path .35s ease, transform .4s ease;
+}
+    
+.event-card:hover .scrap-frame,
+.poster-card:hover .scrap-frame { transform: rotate(0deg); box-shadow: 4px 6px 0 rgba(0, 0, 0, .55); }
+.event-card:hover .scrap-frame img,
+.poster-card:hover .scrap-frame img { transform: scale(1.03); }
+*/
+/* Карточка целиком больше не наклоняется — наклоняется только лоскут-рамка,
+   иначе body карточки «уезжал» бы из-под рваной картинки. */
+   /*
+.event-card, .poster-card { transition: box-shadow .4s ease; }
+.event-card:nth-child(4n+1), .event-card:nth-child(4n+2),
+.event-card:nth-child(4n+3), .event-card:nth-child(4n),
+.poster-card.scrap-0, .poster-card.scrap-1, .poster-card.scrap-2,
+.poster-card.scrap-3, .poster-card.scrap-4, .poster-card.scrap-5 { transform: none; }
+.event-card:hover, .poster-card:hover { transform: translateY(-4px); }
+*/
+/* Бейдж даты — маленький жёлтый скотч поверх лоскута */
+.scrap-frame .event-date-badge,
+.scrap-frame .date-badge {
+    background: var(--gold); color: var(--ink); border-radius: 1px;
+    font-family: inherit; text-transform: uppercase; letter-spacing: .04em;
+    transform: rotate(-2deg); box-shadow: 2px 2px 0 rgba(0, 0, 0, .5);
+    clip-path: polygon(2% 0, 100% 3%, 98% 100%, 0 96%);
+}
+
+/* На мобильных ровнее: наклоны и сдвиги отключаем, читаемость важнее */
+@media (max-width: 640px) {
+    .events-grid { row-gap: 1.5rem; }
+    .events-grid .event-card { --scrap-shift: 0px !important; }
+    .event-card, .poster-card { transform: none !important; }
+    .event-card:hover, .poster-card:hover { transform: translateY(-4px) !important; }
+}

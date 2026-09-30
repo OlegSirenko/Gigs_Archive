@@ -1,17 +1,20 @@
-<a class="card poster-card" href="/posters/{{ p.id }}">
-  <div class="poster-thumb">
+<a class="card poster-card scrap-{{ p.id % 6 }}" href="/posters/{{ p.id }}">
+  {% set ptitle = p.caption | firstline %}
+  <div class="poster-thumb scrap-frame">
     {% set img = p | posterimg %}
     {% if img %}
-      <img src="{{ img }}" alt="{{ p.caption | firstline }}" loading="lazy">
+      <!-- data-tint: JS возьмёт палитру этой афиши и перекрасит вырезки заголовка под неё -->
+      <img src="{{ img }}" alt="{{ ptitle }}" loading="lazy" data-tint>
     {% else %}
-      <div class="poster-placeholder"><span>{{ p.caption | firstline }}</span></div>
+      <!-- Нет картинки — «афиша» из набора букв прямо на месте плейсхолдера -->
+      <div class="poster-placeholder"><span class="ransomify rn-tiny" data-ransom="{{ ptitle }}">{{ ptitle }}</span></div>
     {% endif %}
     {% if p.event_date %}
       <span class="date-badge">{{ p.event_date | ru_date_short }}</span>
     {% endif %}
   </div>
   <div class="card-body">
-    <h3>{{ p.caption | firstline }}</h3>
+    <!-- <h3 class="ransomify" data-ransom="{{ ptitle }}">{{ ptitle }}</h3> -->
     {% if p.event_date %}
       <p class="meta">{{ p.event_date | ru_date }}</p>
     {% endif %}

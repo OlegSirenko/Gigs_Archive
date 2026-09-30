@@ -1,4 +1,7 @@
+# Python bytecode and caches
 __pycache__/
 *.pyc
-gigs_archive.db
-web/.secret_key
+
+# Logs
+logs/
+*.log

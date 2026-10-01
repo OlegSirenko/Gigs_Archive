@@ -11,6 +11,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from web.articles_db import Article, get_article_session
 from web.auth import (
     create_session_cookie,
     get_current_user,
@@ -18,7 +19,7 @@ from web.auth import (
     require_admin,
 )
 from web.config import settings
-from web.database import Article, ModerationStatus, Poster, get_session
+from web.database import ModerationStatus, Poster, get_session
 from web.helpers import slugify, unique_slug
 from web.posters import first_line, poster_image_url
 
@@ -162,10 +163,11 @@ def rotate_password(request: Request, username: str):
 @router.get("/")
 def dashboard(request: Request):
     user = require_admin(request)
-    with get_session() as s:
-        articles = (s.query(Article)
-                    .options(noload(Article.poster))
+    # Articles live in their own DB file (articles.db); posters in the bot DB.
+    with get_article_session() as as_:
+        articles = (as_.query(Article)
                     .order_by(Article.updated_at.desc()).all())
+    with get_session() as s:
         stats = {
             "posters_total": s.query(Poster).count(),
             "posters_approved": s.query(Poster).filter(
@@ -210,7 +212,7 @@ def article_create(
 ):
     user = require_admin(request)
     kind = kind if kind in KINDS else "article"
-    with get_session() as s:
+    with get_article_session() as s:
         article = Article(
             title=title.strip()[:200],
             slug=unique_slug(s, Article, slugify(title)),
@@ -232,13 +234,10 @@ def article_create(
 @router.get("/articles/{article_id}/edit")
 def article_edit(request: Request, article_id: int, created: str = "", saved: str = ""):
     require_admin(request)
-    with get_session() as s:
+    with get_article_session() as s:
         article = s.query(Article).get(article_id)
         if not article:
             return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
-        posters = (s.query(Poster)
-                   .filter(Poster.status == ModerationStatus.APPROVED)
-                   .order_by(Poster.created_at.desc()).limit(200).all())
         form = {
             "title": article.title,
             "kind": article.kind,
@@ -246,6 +245,10 @@ def article_edit(request: Request, article_id: int, created: str = "", saved: st
             "body": article.body,
             "cover_image_url": article.cover_image_url or "",
         }
+    with get_session() as s:
+        posters = (s.query(Poster)
+                   .filter(Poster.status == ModerationStatus.APPROVED)
+                   .order_by(Poster.created_at.desc()).limit(200).all())
     return templates.TemplateResponse(request, "admin/article_form.html", _ctx(
         request, article=article, posters=posters, form=form,
         selected_poster_id=str(article.poster_id or ""),
@@ -268,7 +271,7 @@ def article_update(
 ):
     require_admin(request)
     kind = kind if kind in KINDS else "article"
-    with get_session() as s:
+    with get_article_session() as s:
         article = s.query(Article).get(article_id)
         if not article:
             return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
@@ -293,7 +296,7 @@ def article_update(
 @router.post("/articles/{article_id}/delete")
 def article_delete(request: Request, article_id: int):
     require_admin(request)
-    with get_session() as s:
+    with get_article_session() as s:
         article = s.query(Article).get(article_id)
         if article:
             s.delete(article)

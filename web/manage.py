@@ -8,7 +8,8 @@ Usage (from project root):
     python -m web.manage gen-password --for <username> [--rotate] [--length 16]
     python -m web.manage gen-passwords [--all]           # every admin in the list
     python -m web.manage set-password --for <username>   # type your own password
-    python -m web.manage init-db          # create tables in the shared SQLite DB
+    python -m web.manage init-db          # create tables (bot DB + articles.db)
+    python -m web.manage migrate-articles # move web_articles into separate articles.db
     python -m web.manage seed-demo        # demo article + sample pending poster
     python -m web.manage runserver [--host 0.0.0.0] [--port 8000] [--reload]
 
@@ -157,13 +158,30 @@ def cmd_gen_passwords(all_admins: bool, length: int, rotate: bool):
 
 def cmd_init_db():
     from web.database import init_web_db
+    from web.articles_db import init_articles_db, articles_db_path
     init_web_db()
+    init_articles_db()
     print(f"Tables ready in {settings.database_path}")
+    print(f"Articles table ready in {articles_db_path}")
+
+
+def cmd_migrate_articles():
+    """Copy web_articles out of the shared bot DB into the separate articles.db."""
+    from web.articles_db import (articles_db_path,
+                                 migrate_articles_from_shared_db)
+    n = migrate_articles_from_shared_db()
+    if n:
+        print(f"Migrated {n} article(s) -> {articles_db_path}")
+        print("The old web_articles table was dropped from the shared DB.")
+    else:
+        print("Nothing to migrate (no rows or table already moved).")
 
 
 def cmd_seed_demo():
-    from web.database import Article, ModerationStatus, Poster, User, get_session, init_web_db
+    from web.database import ModerationStatus, Poster, User, get_session, init_web_db
+    from web.articles_db import Article, get_article_session, init_articles_db
     init_web_db()
+    init_articles_db()
     with get_session() as s:
         user = s.query(User).filter(User.username == "demo_organizer").first()
         if not user:
@@ -185,8 +203,10 @@ def cmd_seed_demo():
                 moderated_at=datetime.now(),
             )
             s.add(poster)
-            s.flush()
+        s.commit()
 
+    # Articles live in the separate articles.db — use its own session.
+    with get_article_session() as s:
         if not s.query(Article).filter(Article.slug.like("demo-interview%")).first():
             article = Article(
                 title="Интервью: The Test Signals — как удержать сцену живой",
@@ -249,6 +269,8 @@ def main():
     p.add_argument("--for", dest="username", required=True)
 
     sub.add_parser("init-db")
+    sub.add_parser("migrate-articles",
+                   help="move web_articles from the shared bot DB into articles.db")
     sub.add_parser("seed-demo")
     p = sub.add_parser("runserver")
     p.add_argument("--host", default="127.0.0.1")
@@ -271,6 +293,8 @@ def main():
         cmd_set_password(args.username)
     elif args.cmd == "init-db":
         cmd_init_db()
+    elif args.cmd == "migrate-articles":
+        cmd_migrate_articles()
     elif args.cmd == "seed-demo":
         cmd_seed_demo()
     elif args.cmd == "runserver":

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse  # <-- ДОБАВЬТЕ RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -41,6 +41,7 @@ def _ctx(request: Request, **extra):
         "telegram_channel": settings.telegram_channel,
         "current_user": user,
         "now": datetime.now(),
+        "timedelta": timedelta,
         **extra,
     }
 
@@ -62,6 +63,9 @@ def home(request: Request):
         )
         
         # 2. Недавно прошедшие события (новые!)
+        # Учитываем время мероприятия: событие, которое состоится сегодня
+        # позже текущего момента (event_date > now), ещё НЕ прошло —
+        # оно остаётся в «скорых» и получает зелёный бейдж «скоро».
         past_events = (
             s.query(Poster)
             .filter(
@@ -72,6 +76,14 @@ def home(request: Request):
             .limit(3) # Показываем 3 карточки
             .all()
         )
+        # Подстраховка: если у события дата «сегодня», но время ещё не наступило,
+        # оно не считается прошедшим (например, концерт в 20:00, а сейчас 04:03).
+        past_events = [p for p in past_events if not (p.event_date and p.event_date > now)]
+
+        # События, которые пройдут в ближайшие сутки — помечаем как «скоро»
+        soon_cutoff = timedelta(hours=24)
+        for p in upcoming:
+            p.is_soon = bool(p.event_date and p.event_date <= now + soon_cutoff)
 
         total_events = s.query(Poster).filter(Poster.status == ModerationStatus.APPROVED).count()
 

@@ -12,6 +12,10 @@
     {% if p.event_date %}
       <span class="date-badge">{{ p.event_date | ru_date_short }}</span>
     {% endif %}
+    {# «Скоро»: событие в ближайшие сутки, но ещё не наступило (учитывается время) #}
+    {% if p.event_date and now and p.event_date > now and p.event_date <= now + timedelta(hours=24) %}
+      <span class="event-soon-badge">Скоро</span>
+    {% endif %}
   </div>
   <div class="card-body">
     <!-- <h3 class="ransomify" data-ransom="{{ ptitle }}">{{ ptitle }}</h3> -->

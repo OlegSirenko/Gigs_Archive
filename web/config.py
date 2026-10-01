@@ -103,7 +103,7 @@ class WebSettings:
         self.site_title = os.environ.get("SITE_TITLE", "Gigs Archive")
         # Public Telegram channel username (links are built as https://t.me/<name>)
         self.telegram_channel = os.environ.get("TELEGRAM_CHANNEL", "GigsArchive")
-
+        self.bot_token = os.environ.get("BOT_TOKEN", "NONE")
         # --- Logo ---
         # The site logo lives in web_static/img/. If it is missing, the
         # `python -m web.logo` command downloads the channel's photo from

@@ -213,7 +213,7 @@ async def proxy_poster_image(poster_id: int):
     from web.config import settings
     
     # 1. Запрашиваем путь к файлу через Bot API (внутри сервера)
-    file_info_url = f"https://api.telegram.org/bot{settings.secret_key}/getFile"
+    file_info_url = f"https://api.telegram.org/bot{settings.bot_token}/getFile"
     
     async with httpx.AsyncClient() as client:
         file_resp = await client.get(file_info_url, params={"file_id": poster.photo_file_id})
@@ -225,7 +225,7 @@ async def proxy_poster_image(poster_id: int):
         file_path = file_data["result"]["file_path"]
         
         # 2. Скачиваем саму картинку с CDN Telegram (внутри сервера)
-        cdn_url = f"https://api.telegram.org/file/bot{settings.secret_key}/{file_path}"
+        cdn_url = f"https://api.telegram.org/file/bot{settings.bot_token}/{file_path}"
         img_resp = await client.get(cdn_url)
         
         if img_resp.status_code != 200:

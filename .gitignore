@@ -1,2 +1,7 @@
+# Compiled and build artifacts
 __pycache__/
 *.pyc
+
+# Environment and secrets
+.env
+.secret_key

@@ -1,7 +1,2 @@
-# Python bytecode and caches
 __pycache__/
 *.pyc
-
-# Logs
-logs/
-*.log

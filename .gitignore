@@ -5,3 +5,6 @@ __pycache__/
 # Environment and secrets
 .env
 .secret_key
+web/.secret_key
+*.pyc
+*.db

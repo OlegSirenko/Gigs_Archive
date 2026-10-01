@@ -1,6 +1,6 @@
-# Python cache
-__pycache__/
+# Compiled/Binary files
 *.pyc
+__pycache__/
 
 # Database files
-*.db
+articles.db

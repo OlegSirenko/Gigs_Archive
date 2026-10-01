@@ -88,12 +88,26 @@ def home(request: Request):
 
         total_events = s.query(Poster).filter(Poster.status == ModerationStatus.APPROVED).count()
 
+    # Последние опубликованные статьи — из отдельной БД статей (articles.db)
+    with get_article_session() as sa:
+        recent_articles = (
+            sa.query(Article)
+            .filter(Article.is_published.is_(True))
+            .order_by(Article.published_at.desc().nullslast(),
+                      Article.updated_at.desc())
+            .limit(3)
+            .all()
+        )
+        total_articles = (sa.query(Article)
+                          .filter(Article.is_published.is_(True)).count())
+
     return templates.TemplateResponse(request, "index.html", _ctx(
         request, 
         upcoming=upcoming,
         past_events=past_events, # Передаем новые данные
         total_events=total_events,
-        recent_articles=[], # Пустой список, чтобы секция статей просто скрылась
+        recent_articles=recent_articles,
+        total_articles=total_articles,
     ))
 
 

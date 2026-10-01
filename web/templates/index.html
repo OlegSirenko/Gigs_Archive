@@ -186,7 +186,8 @@
             {% for a in recent_articles %}
             <a href="/articles/{{ a.slug }}" class="article-card reveal">
                 <span class="article-category">{{ a.kind | kind_label }}</span>
-                <h3 class="article-title ransomify" data-ransom="{{ a.title }}">{{ a.title }}</h3>
+                <!-- Заголовок статьи — обычный текст (ransom-набор не читабелен) -->
+                <h3 class="article-title">{{ a.title }}</h3>
                 <p class="article-excerpt">
                     {% if a.lead %}
                         {{ a.lead[:160] }}{% if a.lead|length > 160 %}…{% endif %}

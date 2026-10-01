@@ -5,6 +5,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 
 from web.config import settings
+from web.database import init_web_db
 from web.routes import public as public_routes
 from web.routes import admin as admin_routes
 
@@ -20,6 +21,10 @@ def create_app() -> FastAPI:
         docs_url=None, 
         redoc_url=None,
     )
+
+    # 0. Гарантируем существование таблиц (web_articles и т.д.) в общей SQLite-базе.
+    # create_all() идемпотентен: уже созданные таблицы и данные не трогаются.
+    init_web_db()
 
     # 1. Подключение статических файлов (CSS, JS, картинки)
     static_dir = os.path.join(os.path.dirname(__file__), "..", "web_static")

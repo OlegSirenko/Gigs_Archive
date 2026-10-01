@@ -17,7 +17,33 @@ English summary at the end of this file.
 | `web/manage.py` | CLI: админы и пароли (`add-admin`, `gen-passwords`, …) |
 | `web/admins.json` | Список никнеймов админов (секретом не является) |
 | `web/admin_passwords.json` | **СЕКРЕТ**: хэши паролей. В `.gitignore`, chmod 0600 |
+| `web/database.py` | Модели SQLAlchemy (`users`, `posters`, `web_articles`) и `init_web_db()` |
+| `web/app.py` | Создание FastAPI-приложения; при старте вызывает `init_web_db()` |
 | `web/templates/admin/` | `login.html`, `dashboard.html`, `admins.html`, `password_shown.html`, `article_form.html`, `base_admin.html` |
+
+---
+
+## База данных (таблицы создаются сами)
+
+Сайт и бот используют **одну SQLite-базу** (`gigs_archive.db`, путь задаётся
+через `DATABASE_PATH` в `.env`). Таблица статей называется `web_articles`.
+
+При запуске `uvicorn web.app:app` вызывается `init_web_db()`
+(`create_all`) — отсутствующие таблицы создаются автоматически,
+существующие данные не трогаются. Поэтому ошибка вида:
+
+```
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) no such table: web_articles
+```
+
+больше не должна появляться. Если видите её в логах — значит запущен старый
+код без этой строки; просто перезапустите uvicorn.
+
+Если нужно создать таблицы вручную (например, перед первым запуском):
+
+```bash
+python -c "from web.database import init_web_db; init_web_db()"
+```
 
 ---
 

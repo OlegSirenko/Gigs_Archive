@@ -13,12 +13,21 @@
     <input type="hidden" name="next" value="{{ next }}">
     <label for="username">Никнейм в Telegram</label>
     <input id="username" name="username" type="text" placeholder="your_username"
+           value="{{ username or '' }}"
            autocomplete="username" autofocus required pattern="[A-Za-z0-9_@]{2,40}">
+
+    <label for="password" style="margin-top:14px;">Пароль администратора</label>
+    <input id="password" name="password" type="password" placeholder="permanent password"
+           autocomplete="current-password" required minlength="8">
+
     <button class="btn btn-primary" type="submit">Войти</button>
   </form>
 
-  <p class="hint">Пароля пока нет — это базовый шаг входа. Позже можно добавить
-     Telegram OAuth (виджет “Login with Telegram”) или пароль + TOTP.</p>
+  <p class="hint">Постоянные пароли генерируются для каждого админа из списка и
+     выдаются один раз: <code>python -m web.manage gen-passwords</code>.
+     На диске хранится только PBKDF2-хеш (web/admin_passwords.json), сам пароль
+     восстановить нельзя — при утере его можно перевыпустить командой
+     <code>gen-password --for &lt;ник&gt; --rotate</code>.</p>
 </section>
 
 {% endblock %}

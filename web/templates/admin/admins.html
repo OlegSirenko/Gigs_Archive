@@ -1,0 +1,47 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Админы и пароли — {{ site_title }}{% endblock %}
+{% block content %}
+
+<div class="page-head row">
+  <h1>Администраторы</h1>
+  <a class="btn" href="/admin">← Обзор</a>
+</div>
+
+<p class="muted">Вход в панель: никнейм Telegram из этого списка + постоянный пароль.
+   На сервере хранятся только PBKDF2-хеши (<code>web/admin_passwords.json</code>),
+   сами пароли не сохраняются и показываются один раз при выпуске.</p>
+
+<table class="table">
+  <thead>
+    <tr><th>Никнейм</th><th>Постоянный пароль</th><th>Хеш</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for a in admins %}
+    <tr>
+      <td>@{{ a.username }}</td>
+      <td>
+        {% if a.has_password %}<span class="badge badge-ok">выдан</span>
+        {% else %}<span class="badge badge-draft">нет</span>{% endif %}
+      </td>
+      <td class="muted">{{ a.kdf }}{% if a.iterations %}, {{ a.iterations }} итераций{% endif %}</td>
+      <td class="actions">
+        <form method="post" action="/admin/admins/{{ a.username }}/rotate"
+              onsubmit="return confirm('Выпустить НОВЫЙ пароль для @{{ a.username }}? Старый перестанет работать.');">
+          <button class="btn btn-small btn-danger" type="submit">
+            {{ 'Перевыпустить пароль' if a.has_password else 'Сгенерировать пароль' }}
+          </button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Массовая выдача</h2>
+<p class="hint">Чтобы выпустить пароли сразу всем админам списка (те, у кого пароль
+   уже есть, остаются нетронутыми):</p>
+<pre class="code-block">python -m web.manage gen-passwords
+python -m web.manage gen-passwords --all      # перевыпустить все
+python -m web.manage list-admins              # кто без пароля</pre>
+
+{% endblock %}

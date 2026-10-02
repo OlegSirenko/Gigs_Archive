@@ -906,3 +906,107 @@ body.js-off .poster-placeholder span {
   border: 3px solid var(--paper); box-shadow: 6px 7px 0 rgba(0,0,0,.55); }
 .article-inline-figure figcaption { font-size: .85rem; opacity: .75;
   margin-top: 8px; text-align: center; font-style: italic; }
+
+/* ============================================================
+   ЧИТАБЕЛЬНОСТЬ СТАТЕЙ (макет как на realt.onliner.by:
+   картинка к заголовку сверху, затем заголовок/лид, разделители
+   между смысловыми блоками, картинки «внутри» текста),
+   но в фирменном ransom-note стиле сайта.
+   ============================================================ */
+
+/* Страница чтения статьи: колонка с полями, а не текст «впритык к левому краю» */
+main.container:has(.article-detail) { max-width: 900px; }
+.article-detail {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: clamp(1rem, 4vw, 2.5rem);
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    box-shadow: 8px 9px 0 rgba(0, 0, 0, .55);
+}
+
+/* Картинка к заголовку — в самом верху страницы */
+.article-cover-top { margin: 0 0 1.4rem; }
+.article-cover-top img { display: block; width: 100%; height: auto; }
+.article-cover-top figcaption {
+    font-family: var(--font-type);
+    font-size: .85rem; color: var(--text-muted);
+    margin-top: .6rem; text-align: center; font-style: italic;
+}
+
+/* Шапка: бейдж рубрики, заголовок, лид, дата/автор — с отступами и полями */
+.article-header { padding: .4rem 0 1.1rem; }
+.article-header .kind { margin-bottom: .9rem; }
+.article-header h1 {
+    font-family: var(--font-cut);
+    font-size: clamp(1.7rem, 4.5vw, 2.5rem);
+    line-height: 1.18;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: var(--paper);
+    margin: 0 0 .9rem;
+}
+.article-header .lead {
+    font-family: var(--font-news);
+    font-size: 1.15rem;
+    line-height: 1.55;
+    font-weight: 700;
+    font-style: italic;
+    color: var(--gold);
+    margin: 0 0 .9rem;
+    padding-left: .9rem;
+    border-left: 4px solid var(--red);   /* лид выделен, как подзаголовок-анонс */
+}
+.article-header .meta.muted { margin: 0; }
+
+/* Разделители между блоками (заголовок → лид → картинка → текст) */
+.article-sep {
+    border: none;
+    height: 3px;
+    background: repeating-linear-gradient(90deg,
+        var(--gold) 0 14px, transparent 14px 22px);
+    margin: 2rem auto;
+    max-width: 420px;
+    transform: rotate(-.4deg);
+}
+.article-sep-header { margin: 0 auto 2rem; max-width: 100%; }
+
+/* Текст статьи: читабельная колонка с висячими абзацами */
+.article-body {
+    font-family: var(--font-type);
+    font-size: 1.05rem;
+    line-height: 1.75;
+    color: var(--text-primary);
+}
+.article-body p { margin: 0 0 1.25em; text-indent: 1.6em; }
+.article-body p:first-child { text-indent: 0; }
+.article-body p:last-child { margin-bottom: 0; }
+.article-body a { color: var(--red); text-decoration: underline;
+    text-underline-offset: 3px; }
+.article-body a:hover { color: var(--purple); }
+.article-body strong { color: var(--gold); }
+.article-body em { color: var(--text-secondary); }
+
+/* Картинки внутри текста — как отдельный блок прямо по ходу повествования */
+.article-body .article-inline-figure {
+    text-indent: 0;
+    margin: 2.2rem auto;
+    padding: .8rem;
+    background: rgba(245, 239, 220, .05);
+    border: 1px dashed var(--border-color);
+}
+.article-body .article-inline-figure + p { text-indent: 1.6em; }
+
+/* Связанное событие и кнопки — тоже с полями, не вплотную к краю */
+.linked-event {
+    margin-top: 2rem;
+    padding: 1rem 1.2rem;
+    border: 2px dashed var(--gold);
+    font-family: var(--font-type);
+}
+.article-detail .detail-actions { margin-top: 2rem; justify-content: center; }
+
+@media (max-width: 640px) {
+    .article-detail { padding: 1rem; }
+    .article-body p { text-indent: 0; }
+}

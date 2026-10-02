@@ -44,14 +44,33 @@
   <textarea id="lead" name="lead" rows="2" maxlength="400"
             placeholder="Одно-два предложения…">{{ form.get('lead', '') }}</textarea>
 
-  <label for="cover_image_url">URL обложки (необязательно)</label>
-  <input id="cover_image_url" name="cover_image_url" type="url" maxlength="300"
-         value="{{ form.get('cover_image_url', '') }}"
-         placeholder="https://… or /static/posters/some.jpg">
+  <label for="cover_image_url">Обложка статьи — URL или загруженная картинка (необязательно)</label>
+  <div class="cover-row">
+    <input id="cover_image_url" name="cover_image_url" type="text" maxlength="300"
+           value="{{ form.get('cover_image_url', '') }}"
+           placeholder="https://… или /static/uploads/…"
+           oninput="updateCoverPreview(this.value)">
+    <button class="btn" type="button" onclick="document.getElementById('coverFile').click()">
+      Выбрать файл…
+    </button>
+    <input id="coverFile" type="file" accept="image/*" hidden>
+  </div>
+  <p class="hint">Можно просто вставить картинку из буфера: нажмите на поле выше и
+    <b>Ctrl+V</b>. Файл сжимается на сервере, так что место почти не расходуется.</p>
+  <div id="coverPreview" class="cover-preview hidden">
+    <img id="coverPreviewImg" alt="Обложка">
+    <button class="btn btn-mini" type="button"
+            onclick="setCover('')">Убрать обложку</button>
+  </div>
 
   <label for="body">Основной текст * — интервью, репортажи, критика</label>
+  <div class="editor-toolbar">
+    <button class="btn btn-mini" type="button" id="insertImageBtn">🖼 Вставить картинку…</button>
+    <input id="bodyImageFile" type="file" accept="image/*" multiple hidden>
+    <span class="hint">или вставьте картинку в текст сочетанием <b>Ctrl+V</b></span>
+  </div>
   <textarea id="body" name="body" rows="18" required
-            placeholder="Пустая строка = новый абзац. Поддерживаются **жирный**, *курсив* и обычные ссылки. Строка из одних --- становится разделителем.">{{ form.get('body', '') }}</textarea>
+            placeholder="Пустая строка = новый абзац. Поддерживаются **жирный**, *курсив* и обычные ссылки. Строка из одних --- становится разделителем. Картинки: ![подпись](/static/uploads/…) — вставляются через Ctrl+V или кнопку выше.">{{ form.get('body', '') }}</textarea>
 
   <div class="form-foot">
     <label class="checkbox">
@@ -63,4 +82,135 @@
   </div>
 </form>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const UPLOAD_URL = "/admin/upload-image";
+  const ARTICLE_ID = {{ (article.id if article else "") | tojson }};
+
+  const bodyEl = document.getElementById("body");
+  const coverEl = document.getElementById("cover_image_url");
+  const coverFile = document.getElementById("coverFile");
+  const bodyFile = document.getElementById("bodyImageFile");
+  const insertBtn = document.getElementById("insertImageBtn");
+  const preview = document.getElementById("coverPreview");
+  const previewImg = document.getElementById("coverPreviewImg");
+
+  window.setCover = function (url) {
+    coverEl.value = url;
+    updateCoverPreview(url);
+  };
+  window.updateCoverPreview = function (url) {
+    url = (url || "").trim();
+    if (!url) {
+      preview.classList.add("hidden");
+      previewImg.removeAttribute("src");
+      return;
+    }
+    // превью внешним URL доверяем только http(s); локальные пути — всегда ок
+    if (/^https?:\/\//i.test(url) || url.startsWith("/static/") || url.startsWith("/uploads/")) {
+      previewImg.src = url;
+      preview.classList.remove("hidden");
+    } else {
+      preview.classList.add("hidden");
+    }
+  };
+
+  function setStatus(text, isError) {
+    let el = document.getElementById("uploadStatus");
+    if (!el) {
+      el = document.createElement("p");
+      el.id = "uploadStatus";
+      el.className = "hint upload-status";
+      bodyEl.insertAdjacentElement("afterend", el);
+    }
+    el.textContent = text;
+    el.classList.toggle("upload-error", !!isError);
+    if (!text) return;
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.textContent = ""; }, 6000);
+  }
+
+  async function uploadImage(file) {
+    if (!file || !/^image\//.test(file.type)) {
+      setStatus("В буфере/файле нет изображения.", true);
+      return null;
+    }
+    const fd = new FormData();
+    fd.append("file", file, file.name || "pasted.png");
+    fd.append("article_id", ARTICLE_ID || "");
+    setStatus("Загружаем картинку…");
+    try {
+      const resp = await fetch(UPLOAD_URL, { method: "POST", body: fd });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data.error) {
+        setStatus(data.error || ("Ошибка загрузки (HTTP " + resp.status + ")."), true);
+        return null;
+      }
+      setStatus("Картинка загружена и сжата на сервере ✔");
+      return data;
+    } catch (e) {
+      setStatus("Не удалось загрузить картинку: " + e, true);
+      return null;
+    }
+  }
+
+  function insertAtCursor(text) {
+    const start = bodyEl.selectionStart ?? bodyEl.value.length;
+    const end = bodyEl.selectionEnd ?? start;
+    bodyEl.value = bodyEl.value.slice(0, start) + text + bodyEl.value.slice(end);
+    const pos = start + text.length;
+    bodyEl.focus();
+    bodyEl.setSelectionRange(pos, pos);
+  }
+
+  // Ctrl+V внутри текста статьи
+  bodyEl.addEventListener("paste", async (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const it of items) {
+      if (it.kind === "file" && it.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = it.getAsFile();
+        const data = await uploadImage(file);
+        if (data) insertAtCursor("\n\n" + data.snippet + "\n\n");
+        return;
+      }
+    }
+  });
+
+  // Кнопка «Вставить картинку…» (выбор файла из проводника)
+  insertBtn.addEventListener("click", () => bodyFile.click());
+  bodyFile.addEventListener("change", async () => {
+    for (const file of bodyFile.files) {
+      const data = await uploadImage(file);
+      if (data) insertAtCursor("\n\n" + data.snippet + "\n\n");
+    }
+    bodyFile.value = "";
+  });
+
+  // Обложка: файл из проводника или Ctrl+V в поле URL
+  coverFile.addEventListener("change", async () => {
+    const data = await uploadImage(coverFile.files[0]);
+    if (data) setCover(data.url);
+    coverFile.value = "";
+  });
+  coverEl.addEventListener("paste", async (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const it of items) {
+      if (it.kind === "file" && it.type.startsWith("image/")) {
+        e.preventDefault();
+        const data = await uploadImage(it.getAsFile());
+        if (data) setCover(data.url);
+        return;
+      }
+    }
+  });
+
+  updateCoverPreview(coverEl.value);
+})();
+</script>
 {% endblock %}

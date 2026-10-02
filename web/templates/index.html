@@ -187,24 +187,8 @@
         
         {% if recent_articles %}
         <div class="articles-grid">
-            {% for a in recent_articles %}
-            <a href="/articles/{{ a.slug }}" class="article-card reveal">
-                <span class="article-category">{{ a.kind | kind_label }}</span>
-                <!-- Заголовок статьи — обычный текст (ransom-набор не читабелен) -->
-                <h3 class="article-title">{{ a.title }}</h3>
-                <p class="article-excerpt">
-                    {% if a.lead %}
-                        {{ a.lead[:160] }}{% if a.lead|length > 160 %}…{% endif %}
-                    {% else %}
-                        Читайте полный текст статьи...
-                    {% endif %}
-                </p>
-                <div class="article-footer">
-                    <span class="article-date">{{ a.published_at | ru_date }}</span>
-                    <span class="article-read-more">Читать →</span>
-                </div>
-            </a>
-            {% endfor %}
+            <!-- Карточки статей — тот же разметка-шаблон, что и на /articles -->
+            {% for a in recent_articles %}{% include "_article_card.html" %}{% endfor %}
         </div>
         {% else %}
         <div class="empty">

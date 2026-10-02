@@ -93,7 +93,7 @@ def home(request: Request):
 
         # 1. Скорые события: у них ещё НЕ наступили дата И время.
         #    Событие «сегодня в 20:00» при now()==04:45 остаётся скорым
-        #    и получает зелёный бейдж «Скоро».
+        #    и получает зелёный бейдж «Сегодня».
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         raw_upcoming = (
             approved.filter(
@@ -120,7 +120,7 @@ def home(request: Request):
         past_events = sorted((p for p in raw_past if _event_dt(p) < now),
                              key=_event_dt, reverse=True)[:3]
 
-        # Бейдж «Скоро»: событие пройдёт в течение ближайших суток
+        # Бейдж «Сегодня»: событие пройдёт в течение ближайших суток
         soon_cutoff = timedelta(hours=24)
         for p in upcoming:
             edt = _event_dt(p)
@@ -174,7 +174,7 @@ def posters_list(
             .all()
         )
 
-    # Зелёный бейдж «Скоро»: событие ещё не прошло И пройдёт в течение суток
+    # Зелёный бейдж «Сегодня»: событие ещё не прошло И пройдёт в течение суток
     now = datetime.now()
     soon_cutoff = now + timedelta(hours=24)
     for p in items:

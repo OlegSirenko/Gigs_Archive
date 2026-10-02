@@ -5,3 +5,5 @@ __pycache__/
 # Logs and temp files
 *.log
 *.tmp
+
+/web_static/uploads/*

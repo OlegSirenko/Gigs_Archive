@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse  # <-- ДОБАВЬТЕ RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -54,37 +54,77 @@ def _ctx(request: Request, **extra):
         "telegram_channel": settings.telegram_channel,
         "current_user": user,
         "now": datetime.now(),
+        "timedelta": timedelta,
         **extra,
     }
+
+def _event_dt(p: Poster):
+    """Нормализует дату события для корректного сравнения с now().
+
+    Проблема: event_date может храниться как дата без времени (полночь,
+    например из date-picker в боте) или как datetime с временем.
+    Наивная полночь «сегодня» (00:00) при now()==04:45 ошибочно считалась
+    прошедшей, хотя концерт в 20:00 ещё не начался.
+
+    Правила:
+    - если время события == 00:00 (дата без времени) — событие «весь день»:
+      оно считается прошедшим только после окончания текущих суток;
+    - иначе сравниваем дату+время напрямую.
+    """
+    dt = p.event_date
+    if dt is None:
+        return None
+    if isinstance(dt, datetime):
+        d = dt
+    else:  # date без времени
+        d = datetime.combine(dt, datetime.min.time())
+    if d.hour == 0 and d.minute == 0 and d.second == 0:
+        # дата хранится без времени -> событие актуально до конца суток
+        return d.replace(hour=23, minute=59, second=59)
+    return d
+
 
 # ---------------- Home (Главная страница) ----------------
 @router.get("/")
 def home(request: Request):
     now = datetime.now()
     with get_session() as s:
-        # 1. Скорые события (будущие)
-        upcoming = (
-            s.query(Poster)
-            .filter(
-                Poster.status == ModerationStatus.APPROVED,
-                Poster.event_date >= now,
+        approved = s.query(Poster).filter(Poster.status == ModerationStatus.APPROVED)
+
+        # 1. Скорые события: у них ещё НЕ наступили дата И время.
+        #    Событие «сегодня в 20:00» при now()==04:45 остаётся скорым
+        #    и получает зелёный бейдж «Скоро».
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        raw_upcoming = (
+            approved.filter(
+                or_(
+                    Poster.event_date >= now,
+                    Poster.event_date >= today_start,
+                )
             )
             .order_by(Poster.event_date.asc())
-            .limit(6)
+            .limit(12)
             .all()
         )
-        
-        # 2. Недавно прошедшие события (новые!)
-        past_events = (
-            s.query(Poster)
-            .filter(
-                Poster.status == ModerationStatus.APPROVED,
-                Poster.event_date < now,
-            )
-            .order_by(Poster.event_date.desc()) # Сначала самые свежие из прошедших
-            .limit(3) # Показываем 3 карточки
+        upcoming = sorted((p for p in raw_upcoming if _event_dt(p) >= now),
+                          key=_event_dt)[:6]
+
+        # 2. Недавно прошедшие события: реально завершились (наступили
+        #    дата И время, либо законные сутки для событий без времени).
+        raw_past = (
+            approved.filter(Poster.event_date < now)
+            .order_by(Poster.event_date.desc())
+            .limit(12)
             .all()
         )
+        past_events = sorted((p for p in raw_past if _event_dt(p) < now),
+                             key=_event_dt, reverse=True)[:3]
+
+        # Бейдж «Скоро»: событие пройдёт в течение ближайших суток
+        soon_cutoff = timedelta(hours=24)
+        for p in upcoming:
+            edt = _event_dt(p)
+            p.is_soon = bool(edt and now <= edt <= now + soon_cutoff)
 
         total_events = s.query(Poster).filter(Poster.status == ModerationStatus.APPROVED).count()
 
@@ -133,6 +173,14 @@ def posters_list(
             .limit(per_page)
             .all()
         )
+
+    # Зелёный бейдж «Скоро»: событие ещё не прошло И пройдёт в течение суток
+    now = datetime.now()
+    soon_cutoff = now + timedelta(hours=24)
+    for p in items:
+        edt = _event_dt(p)
+        p.is_soon = bool(edt and now <= edt <= soon_cutoff)
+
     pages = max(1, (total + per_page - 1) // per_page)
     return templates.TemplateResponse(request, "posters.html", _ctx(
         request, posters=items, q=q, page=page, pages=pages, total=total,

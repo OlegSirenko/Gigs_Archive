@@ -1,8 +1,7 @@
-# Compiled and build artifacts
-__pycache__/
-
-# Database files
-articles.db
 .env
+*.pyc
+
+*.db
 web/admin_passwords.json
-web/admin_passwords.json
+web/admin.json
+

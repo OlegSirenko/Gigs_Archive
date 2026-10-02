@@ -1,6 +1,3 @@
-# Compiled and cache files
+# Python compiled files
 __pycache__/
 *.pyc
-
-# Database files (generated)
-articles.db

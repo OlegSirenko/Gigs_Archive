@@ -11,11 +11,14 @@
   <div class="card-body">
     <span class="kind kind-{{ a.kind }}">{{ a.kind | kind_label }}</span>
     <!-- Заголовок — обычный текст (ransom-набор не читабелен) -->
-    <h3>{{ a.title }}</h3>
-    {% if a.lead %}<p class="excerpt">{{ a.lead[:160] }}{% if a.lead|length > 160 %}…{% endif %}</p>{% endif %}
-    <p class="meta">
-      {% if a.published_at %}{{ a.published_at | ru_date }}{% endif %}
-      {% if a.author_username %} · @{{ a.author_username }}{% endif %}
-    </p>
+    <h3 class="article-title">{{ a.title }}</h3>
+    {% if a.lead %}<p class="excerpt article-excerpt">{{ a.lead[:160] }}{% if a.lead|length > 160 %}…{% endif %}</p>{% endif %}
+    <div class="article-footer">
+      <span class="article-date meta muted">
+        {% if a.published_at %}{{ a.published_at | ru_date }}{% endif %}
+        {% if a.author_username %} · @{{ a.author_username }}{% endif %}
+      </span>
+      <span class="article-read-more">Читать →</span>
+    </div>
   </div>
 </a>

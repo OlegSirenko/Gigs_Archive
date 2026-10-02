@@ -34,6 +34,11 @@ def create_app() -> FastAPI:
     static_dir = os.path.join(os.path.dirname(__file__), "..", "web_static")
     os.makedirs(static_dir, exist_ok=True)
     os.makedirs(settings.posters_dir, exist_ok=True)
+
+    # Картинки, загружаемые из админки (вставки в текст и обложки):
+    # web_static/uploads -> /static/uploads (через тот же StaticFiles mount)
+    from web.image_storage import ensure_uploads_dir
+    ensure_uploads_dir()
     
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 

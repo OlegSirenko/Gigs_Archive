@@ -111,6 +111,14 @@ _MD_MARKERS_RE = re.compile(r'~~|[~|`]')
 _LONE_STAR_RE = re.compile(r'(?<!\S)\*(?!\*)|\*(?!\*)(?!\S)')
 _BARE_URL_LINK_RE = re.compile(
     r'(?<!["\w/>])(?:https?://|tg://)[^\s<>"\']+', re.IGNORECASE)
+# Картинки в текстах статей: ![описание](/static/uploads/… или https://…)
+_MD_IMAGE_RE = re.compile(
+    r'!\[([^\]]*)\]\(\s*((?:https?://|/)[^)\s]+)(?:\s+"[^"]*")?\s*\)')
+# Разрешаем <img> только для картинок, загруженных на наш сервер (или голых
+# ссылок на /static/uploads/...); внешние URL остаются обычным текстом.
+_ALLOWED_IMG_SRC_RE = re.compile(r'^(?:/static/uploads/|https?://)', re.IGNORECASE)
+_LOCAL_UPLOAD_URL_RE = re.compile(
+    r'(?<![\w/"\'(])((?:/static/uploads/|\./static/uploads/)[^\s<>"\']+)', re.IGNORECASE)
 _TG_EMPH_TAG_RE = re.compile(
     r'</?\s*(?:b|i|em|strong)\b[^>]*>', re.IGNORECASE
 )
@@ -122,6 +130,23 @@ def _unescape_tg(text: str) -> str:
     return (text.replace("&lt;", "<").replace("&gt;", ">")
                 .replace("&quot;", '"').replace("&#39;", "'")
                 .replace("&amp;", "&"))
+
+
+def _render_md_image(alt: str, url: str) -> str:
+    """![alt](url) -> валидный <figure><img>; только безопасные URL."""
+    from html import escape
+    url = url.strip()
+    if url.startswith("./"):
+        url = url[1:]  # ./static/... -> /static/...
+    if not _ALLOWED_IMG_SRC_RE.match(url):
+        return f"![{alt}]({url})"  # оставляем как есть (обычный текст)
+    figclass = ' class="article-inline-figure"'
+    img = (f'<img src="{escape(url, quote=True)}" '
+           f'alt="{escape(alt or "", quote=True)}" loading="lazy">')
+    if alt.strip():
+        return (f'<figure{figclass}>{img}'
+                f'<figcaption>{escape(alt, quote=True)}</figcaption></figure>')
+    return f"<figure{figclass}>{img}</figure>"
 
 
 def _markdown_emphasis(text: str) -> str:
@@ -206,9 +231,8 @@ def clean_telegram_markup(text: str | None, links: bool = True,
     text = _TG_LINK_TAG_RE.sub(_keep_link, text)
     text = _MD_LINK_FULL_RE.sub(_keep_md_link, text)
     if links:
-        # голые URL (например «http://153.80.244.237/posters/185») делаем
-        # кликабельными; уже обработанные ссылки (в плейсхолдерах/атрибутах)
-        # не затрагиваются
+        # картинки в markdown-синтаксисе (![..](http://..)) уже вынуты в
+        # плейсхолдеры на уровне render_body; сюда они не доходят
         def _linkify(m: re.Match) -> str:
             url = m.group(0).rstrip('.,;:!?)»—-')
             tail = m.group(0)[len(url):]
@@ -218,6 +242,14 @@ def clean_telegram_markup(text: str | None, links: bool = True,
             )
             return token + tail
         text = _BARE_URL_LINK_RE.sub(_linkify, text)
+        # голые ссылки на загруженные картинки (/static/uploads/...) тоже
+        # превращаем в <img>, а не в <a>
+        def _inline_upload(m: re.Match) -> str:
+            url = m.group(1).rstrip('.,;:!?)»—-')
+            token = f"\x00LINK{len(placeholders)}\x00"
+            placeholders.append(_render_md_image("", url))
+            return token
+        text = _LOCAL_UPLOAD_URL_RE.sub(_inline_upload, text)
     if emphasis:
         # <b>/<i>/<em>/<strong> и пары **/__ превращаем в валидный HTML-тег —
         # сайт отобразит выделение стилизацией, а не текстом разметки
@@ -265,6 +297,17 @@ def render_body(text: str) -> Markup:
             links.append(inner)
         return token
 
+    def _stash_image(m: re.Match) -> str:
+        """![alt](url) -> <figure><img> (картинки внутри текста статьи)."""
+        token = f"\x00P{len(links)}\x00"
+        links.append(_render_md_image(m.group(1), m.group(2)))
+        return token
+
+    # Картинки вынимаем первыми: их синтаксис ![..](..) пересекается со
+    # ссылочным [..](..), и не должен быть съеден обработкой ссылок.
+    text = _MD_IMAGE_RE.sub(_stash_image, text)
+    # <a href="...">текст</a> (в т.ч. с переносом строки внутри тега) вынимаем
+    # в плейсхолдеры до разбиения на абзацы, чтобы разметка не «ломалась»
     text = _TG_LINK_TAG_RE.sub(_stash, text)
     paragraphs = re.split(r'\n\s*\n', text)
     formatted = []

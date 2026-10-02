@@ -1,8 +1,2 @@
-.env
+__pycache__/
 *.pyc
-
-*.db
-web/admin_passwords.json
-web/admin.json
-
-articles.db

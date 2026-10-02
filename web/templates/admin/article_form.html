@@ -64,13 +64,37 @@
   </div>
 
   <label for="body">Основной текст * — интервью, репортажи, критика</label>
-  <div class="editor-toolbar">
-    <button class="btn btn-mini" type="button" id="insertImageBtn">🖼 Вставить картинку…</button>
-    <input id="bodyImageFile" type="file" accept="image/*" multiple hidden>
-    <span class="hint">или вставьте картинку в текст сочетанием <b>Ctrl+V</b></span>
+  <div class="editor-toolbar" id="editorToolbar">
+    <span class="tb-group">
+      <button class="btn btn-mini tb-btn" type="button" data-fmt="bold" title="Жирный (Ctrl+B)"><b>Ж</b></button>
+      <button class="btn btn-mini tb-btn" type="button" data-fmt="italic" title="Курсив (Ctrl+I)"><i>К</i></button>
+      <button class="btn btn-mini tb-btn" type="button" data-fmt="strike" title="Зачёркнутый"><s>С</s></button>
+    </span>
+    <span class="tb-sep"></span>
+    <span class="tb-group">
+      <button class="btn btn-mini tb-btn" type="button" data-fmt="h2" title="Подзаголовок">H2</button>
+      <button class="btn btn-mini tb-btn" type="button" data-fmt="h3" title="Подзаголовок мельче">H3</button>
+      <button class="btn btn-mini tb-btn" type="button" data-fmt="quote" title="Цитата">&laquo; &raquo;</button>
+      <button class="btn btn-mini tb-btn" type="button" data-fmt="ul" title="Маркированный список">&bull; Список</button>
+      <button class="btn btn-mini tb-btn" type="button" data-fmt="ol" title="Нумерованный список">1. Список</button>
+      <button class="btn btn-mini tb-btn" type="button" data-fmt="hr" title="Разделитель-линия">— HR</button>
+      <button class="btn btn-mini tb-btn" type="button" data-fmt="link" title="Ссылка (Ctrl+K)">🔗 Ссылка</button>
+    </span>
+    <span class="tb-sep"></span>
+    <span class="tb-group">
+      <button class="btn btn-mini tb-btn" type="button" id="insertImageBtn">🖼 Картинка…</button>
+      <input id="bodyImageFile" type="file" accept="image/*" multiple hidden>
+    </span>
+    <span class="tb-hint">Картинку из буфера (например, скопированную из Telegram)
+      вставляйте прямо в редактор: <b>Ctrl+V</b></span>
   </div>
   <textarea id="body" name="body" rows="18" required
             placeholder="Пустая строка = новый абзац. Поддерживаются **жирный**, *курсив* и обычные ссылки. Строка из одних --- становится разделителем. Картинки: ![подпись](/static/uploads/…) — вставляются через Ctrl+V или кнопку выше.">{{ form.get('body', '') }}</textarea>
+
+  <div id="livePreview" class="live-preview hidden">
+    <p class="hint live-preview-title">Предпросмотр (как в статье):</p>
+    <div id="livePreviewBody" class="article-body live-preview-body"></div>
+  </div>
 
   <div id="bodyImages" class="body-images hidden">
     <p class="hint">Картинки в тексте:</p>
@@ -251,22 +275,150 @@
     bodyEl.setSelectionRange(pos, pos);
   }
 
-  // Ctrl+V внутри текста статьи
-  bodyEl.addEventListener("paste", async (e) => {
+  // Ctrl+V внутри текста статьи (картинка из буфера — например, скопированная
+  // из Telegram: в clipboardData лежит файл-изображение, а не путь к нему)
+  async function pasteImageHandler(e) {
     const items = e.clipboardData && e.clipboardData.items;
-    if (!items) return;
+    if (!items) return false;
     for (const it of items) {
       if (it.kind === "file" && it.type.startsWith("image/")) {
         e.preventDefault();
         const file = it.getAsFile();
         const data = await uploadImage(file);
         if (data) { insertAtCursor("\n\n" + data.snippet + "\n\n"); renderBodyImages(); }
-        return;
+        return true;
       }
     }
+    return false;
+  }
+  bodyEl.addEventListener("paste", (e) => { pasteImageHandler(e); });
+
+  // --- Панель форматирования (как в Word, но для markdown) --------------
+  function wrapSelection(before, after, placeholder) {
+    const start = bodyEl.selectionStart ?? 0;
+    const end = bodyEl.selectionEnd ?? 0;
+    const sel = bodyEl.value.slice(start, end) || placeholder || "";
+    bodyEl.value = bodyEl.value.slice(0, start) + before + sel + after +
+                   bodyEl.value.slice(end);
+    bodyEl.focus();
+    bodyEl.setSelectionRange(start + before.length, start + before.length + sel.length);
+    renderBodyImages();
+  }
+  function prefixLines(prefix, numbered) {
+    const start = bodyEl.selectionStart ?? 0;
+    const end = bodyEl.selectionEnd ?? 0;
+    const v = bodyEl.value;
+    const ls = v.lastIndexOf("\n", start - 1) + 1;
+    let le = v.indexOf("\n", end);
+    if (le === -1) le = v.length;
+    const lines = v.slice(ls, le).split("\n");
+    const out = lines.map((l, i) =>
+      (numbered ? (i + 1) + ". " : prefix) + l.replace(/^\s*(?:[-*\u2022]\s+|\d+[.)]\s+)/, "")
+    ).join("\n");
+    bodyEl.value = v.slice(0, ls) + out + v.slice(le);
+    bodyEl.focus();
+    bodyEl.setSelectionRange(ls, ls + out.length);
+  }
+  function insertBlock(text) {
+    insertAtCursor("\n\n" + text + "\n\n");
+    renderBodyImages();
+  }
+  const FORMAT_ACTIONS = {
+    bold:    () => wrapSelection("**", "**", "жирный"),
+    italic:  () => wrapSelection("*", "*", "курсив"),
+    strike:  () => wrapSelection("~~", "~~", "зачёркнуто"),
+    h2:      () => prefixLines("## "),
+    h3:      () => prefixLines("### "),
+    quote:   () => prefixLines("> "),
+    ul:      () => prefixLines("- "),
+    ol:      () => prefixLines("", true),
+    hr:      () => insertBlock("---"),
+    link:    () => {
+      const start = bodyEl.selectionStart ?? 0;
+      const end = bodyEl.selectionEnd ?? 0;
+      const sel = bodyEl.value.slice(start, end) || "текст ссылки";
+      bodyEl.value = bodyEl.value.slice(0, start) + "[" + sel + "](https://)" +
+                     bodyEl.value.slice(end);
+      bodyEl.focus();
+      const urlPos = start + sel.length + 3;   // позиция внутри https://
+      bodyEl.setSelectionRange(urlPos, urlPos + 8);
+    },
+  };
+  document.querySelectorAll("#editorToolbar [data-fmt]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const fn = FORMAT_ACTIONS[btn.dataset.fmt];
+      if (fn) fn();
+      schedulePreview();
+    });
+  });
+  // горячие клавиши Ctrl+B / Ctrl+I / Ctrl+K
+  bodyEl.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const key = e.key.toLowerCase();
+    const action = { b: "bold", i: "italic", k: "link" }[key];
+    if (action) { e.preventDefault(); FORMAT_ACTIONS[action](); schedulePreview(); }
   });
 
-  // Кнопка «Вставить картинку…» (выбор файла из проводника)
+  // --- Живой предпросмотр: картинки сразу показываются картинками --------
+  const previewWrap = document.getElementById("livePreview");
+  const previewBody = document.getElementById("livePreviewBody");
+  const escHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                          .replace(/>/g, "&gt;");
+  function mdToPreviewHtml(src) {
+    let text = escHtml(src || "");
+    // блоки картинок -> <figure><img> (видно и как выглядит, и подпись)
+    text = text.replace(/!\[([^\]]*)\]\(\s*([^)\s]+)(?:\s+&quot;[^&]*&quot;)?\s*\)/g,
+      (m, alt, url) => "<figure class=\"article-inline-figure\"><img src=\"" + url +
+        "\" alt=\"" + alt + "\" loading=\"lazy\">" +
+        (alt.trim() ? "<figcaption>" + alt + "</figcaption>" : "") + "</figure>");
+    // разделители ---
+    text = text.replace(/^[\s]*-{3,}[\s]*$/gm, '<hr class="article-sep">');
+    // блочные элементы (по строкам)
+    text = text.replace(/^#{1,6}\s+(.+)$/gm, '<h3 class="article-subhead">$1</h3>');
+    text = text.replace(/^&gt;\s?(.*)$/gm, "<blockquote>$1</blockquote>");
+    text = text.replace(/(?:^|\n)((?:[-•]\s+.+(?:\n|$))+)/g, (m, block) => {
+      const items = block.trim().split("\n")
+        .map((l) => "<li>" + l.replace(/^[-•]\s+/, "") + "</li>").join("");
+      return "\n<ul class=\"article-list\">" + items + "</ul>\n";
+    });
+    text = text.replace(/(?:^|\n)((?:\d+[.)]\s+.+(?:\n|$))+)/g, (m, block) => {
+      const items = block.trim().split("\n")
+        .map((l) => "<li>" + l.replace(/^\d+[.)]\s+/, "") + "</li>").join("");
+      return "\n<ol class=\"article-list\">" + items + "</ol>\n";
+    });
+    // inline-разметка
+    text = text.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+    text = text.replace(/__([^_\n]+)__/g, "<strong>$1</strong>");
+    text = text.replace(/(^|[^\w*])\*([^*\n]+)\*(?![\w*])/g, "$1<em>$2</em>");
+    text = text.replace(/~~([^~\n]+)~~/g, "<s>$1</s>");
+    text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|\/static\/[^)\s]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    // абзацы: пустая строка = новый <p>
+    return text.split(/\n\s*\n/).map((p) => {
+      p = p.trim();
+      if (!p) return "";
+      if (/^(?:<(?:figure|hr|h\d|blockquote|ul|ol)|<hr)/i.test(p)) return p;
+      return "<p>" + p.replace(/\n/g, "<br>") + "</p>";
+    }).join("\n");
+  }
+  let previewTimer = null;
+  function schedulePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(renderPreview, 350);
+  }
+  function renderPreview() {
+    const html = mdToPreviewHtml(bodyEl.value);
+    if (!bodyEl.value.trim()) {
+      previewWrap.classList.add("hidden");
+      previewBody.innerHTML = "";
+      return;
+    }
+    previewBody.innerHTML = html;
+    previewWrap.classList.remove("hidden");
+  }
+  bodyEl.addEventListener("input", schedulePreview);
+
+  // Кнопка «Картинка…» (выбор файла из проводника)
   insertBtn.addEventListener("click", () => bodyFile.click());
   bodyFile.addEventListener("change", async () => {
     for (const file of bodyFile.files) {
@@ -274,6 +426,7 @@
       if (data) { insertAtCursor("\n\n" + data.snippet + "\n\n"); renderBodyImages(); }
     }
     bodyFile.value = "";
+    schedulePreview();
   });
 
   // Обложка: файл из проводника или Ctrl+V в поле URL
@@ -297,6 +450,7 @@
 
   updateCoverPreview(coverEl.value);
   renderBodyImages();
+  renderPreview();
 })();
 </script>
 {% endblock %}

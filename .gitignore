@@ -1,1 +1,7 @@
-(empty)
+.env
+*.pyc
+
+*.db
+web/admin_passwords.json
+web/admin.json
+

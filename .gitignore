@@ -1,10 +1,8 @@
 # Compiled and build artifacts
 __pycache__/
-*.pyc
 
-# Environment and secrets
+# Database files
+articles.db
 .env
-.secret_key
-web/.secret_key
-*.pyc
-*.db
+web/admin_passwords.json
+web/admin_passwords.json

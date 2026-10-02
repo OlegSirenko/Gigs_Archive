@@ -1010,3 +1010,28 @@ main.container:has(.article-detail) { max-width: 900px; }
     .article-detail { padding: 1rem; }
     .article-body p { text-indent: 0; }
 }
+
+/* Подзаголовки и списки внутри текста статьи */
+.article-body .article-subhead {
+    font-family: var(--font-cut);
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--paper);
+    margin: 1.8em 0 .7em;
+    line-height: 1.25;
+}
+.article-body blockquote {
+    margin: 1.4em 0;
+    padding: .6em 1.2em;
+    border-left: 4px solid var(--red);
+    background: rgba(245, 239, 220, .05);
+    font-style: italic;
+}
+.article-body ul.article-list,
+.article-body ol.article-list {
+    margin: 1em 0 1.25em;
+    padding-left: 2em;
+    text-indent: 0;
+}
+.article-body ul.article-list { list-style: square; }
+.article-body li { margin: .3em 0; }

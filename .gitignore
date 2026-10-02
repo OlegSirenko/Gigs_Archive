@@ -1,6 +1,8 @@
-# Compiled/Binary files
-*.pyc
+# Compiled and build artifacts
 __pycache__/
 
 # Database files
 articles.db
+.env
+web/admin_passwords.json
+web/admin_passwords.json

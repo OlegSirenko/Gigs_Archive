@@ -11,6 +11,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from web.articles_db import Article, get_article_session
 from web.auth import (
     create_session_cookie,
     get_current_user,
@@ -18,7 +19,7 @@ from web.auth import (
     require_admin,
 )
 from web.config import settings
-from web.database import Article, ModerationStatus, Poster, get_session
+from web.database import ModerationStatus, Poster, get_session
 from web.helpers import slugify, unique_slug
 from web.posters import first_line, poster_image_url
 
@@ -51,27 +52,51 @@ def _ctx(request: Request, **extra):
 # ---------------- Login / logout ----------------
 
 @router.get("/login")
-def login_form(request: Request, next: str = "/admin", error: str = ""):
+def login_form(request: Request, next: str = "/admin", error: str = "",
+               username: str = ""):
     user = get_current_user(request)
     if user and user.is_admin:
         return RedirectResponse("/admin", status_code=302)
     return templates.TemplateResponse(request, "admin/login.html",
-                                      _ctx(request, next=next, error=error))
+                                      _ctx(request, next=next, error=error,
+                                           username=username))
 
 
 @router.post("/login")
-def login(request: Request, username: str = Form(...), next: str = Form("/admin")):
+def login(request: Request, username: str = Form(...),
+          password: str = Form(""), next: str = Form("/admin")):
+    """Admin sign-in: Telegram nickname from the admin list + permanent password.
+
+    Passwords are generated per admin (`python -m web.manage gen-passwords`)
+    and stored only as PBKDF2 hashes in web/admin_passwords.json.
+    """
     username = username.strip().lstrip("@")
     if not username or ".." in next or next.startswith("//"):
         next = "/admin"
-    if not settings.is_admin_username(username):
+
+    def denied(message: str, status_code: int = 403):
         return templates.TemplateResponse(
-            request,
-            "admin/login.html",
-            _ctx(request, next=next,
-                 error="Access denied: this username is not on the admin list."),
-            status_code=403,
+            request, "admin/login.html",
+            _ctx(request, next=next, error=message, username=username),
+            status_code=status_code,
         )
+
+    if not settings.is_admin_username(username):
+        return denied("Access denied: this username is not on the admin list.")
+
+    # Nickname alone is never enough any more — a permanent password is required.
+    if not password:
+        return denied("Введите пароль администратора. / Please enter your "
+                      "admin password.", status_code=401)
+
+    if not settings.has_admin_password(username):
+        return denied(f"No password generated for @{username} yet. An existing "
+                      "admin must run: python -m web.manage gen-passwords "
+                      f"--for {username.lower()}")
+
+    if not settings.verify_admin_password(username, password):
+        return denied("Неверный пароль. / Incorrect password.")
+
     response = RedirectResponse(next if next.startswith("/admin") else "/admin",
                                 status_code=302)
     response.set_cookie(
@@ -89,16 +114,60 @@ def logout(request: Request):
     return logout_response("/")
 
 
+# ---------------- Admin team & permanent passwords ----------------
+
+@router.get("/admins")
+def admins_page(request: Request):
+    """Admin list with password status. Nicknames + hashes only, never secrets."""
+    require_admin(request)
+    from web.passwords import password_store
+
+    hashes = settings.admin_password_hashes()
+    admins = []
+    for username in sorted(settings.all_admin_usernames()):
+        record = hashes.get(username)
+        admins.append({
+            "username": username,
+            "has_password": record is not None,
+            "kdf": (record or {}).get("kdf", ""),
+            "iterations": (record or {}).get("iterations", ""),
+        })
+    return templates.TemplateResponse(request, "admin/admins.html",
+                                      _ctx(request, admins=admins))
+
+
+@router.post("/admins/{username}/rotate")
+def rotate_password(request: Request, username: str):
+    """Issue a NEW permanent password for an admin and show it once."""
+    user = require_admin(request)
+    from web.passwords import password_store
+
+    username = username.lstrip("@").lower()
+    if not settings.is_admin_username(username):
+        return RedirectResponse("/admin/admins?error=not_admin", status_code=302)
+
+    new_password = password_store.generate_for(username)
+    # The plaintext can only travel out of here once — straight to the browser.
+    response = templates.TemplateResponse(
+        request, "admin/password_shown.html",
+        _ctx(request, target=username, password=new_password,
+             actor=user.username),
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 # ---------------- Dashboard ----------------
 
 @router.get("")
 @router.get("/")
 def dashboard(request: Request):
-    require_admin(request)
-    with get_session() as s:
-        articles = (s.query(Article)
-                    .options(noload(Article.poster))
+    user = require_admin(request)
+    # Articles live in their own DB file (articles.db); posters in the bot DB.
+    with get_article_session() as as_:
+        articles = (as_.query(Article)
                     .order_by(Article.updated_at.desc()).all())
+    with get_session() as s:
         stats = {
             "posters_total": s.query(Poster).count(),
             "posters_approved": s.query(Poster).filter(
@@ -108,8 +177,11 @@ def dashboard(request: Request):
             "articles_total": len(articles),
             "articles_published": sum(1 for a in articles if a.is_published),
         }
+    no_password = [a for a in sorted(settings.all_admin_usernames())
+                   if not settings.has_admin_password(a)]
     return templates.TemplateResponse(request, "admin/dashboard.html",
-                                      _ctx(request, articles=articles, stats=stats))
+                                      _ctx(request, articles=articles, stats=stats,
+                                           admins_without_password=no_password))
 
 
 # ---------------- Article CRUD ----------------
@@ -140,7 +212,7 @@ def article_create(
 ):
     user = require_admin(request)
     kind = kind if kind in KINDS else "article"
-    with get_session() as s:
+    with get_article_session() as s:
         article = Article(
             title=title.strip()[:200],
             slug=unique_slug(s, Article, slugify(title)),
@@ -162,13 +234,10 @@ def article_create(
 @router.get("/articles/{article_id}/edit")
 def article_edit(request: Request, article_id: int, created: str = "", saved: str = ""):
     require_admin(request)
-    with get_session() as s:
+    with get_article_session() as s:
         article = s.query(Article).get(article_id)
         if not article:
             return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
-        posters = (s.query(Poster)
-                   .filter(Poster.status == ModerationStatus.APPROVED)
-                   .order_by(Poster.created_at.desc()).limit(200).all())
         form = {
             "title": article.title,
             "kind": article.kind,
@@ -176,6 +245,10 @@ def article_edit(request: Request, article_id: int, created: str = "", saved: st
             "body": article.body,
             "cover_image_url": article.cover_image_url or "",
         }
+    with get_session() as s:
+        posters = (s.query(Poster)
+                   .filter(Poster.status == ModerationStatus.APPROVED)
+                   .order_by(Poster.created_at.desc()).limit(200).all())
     return templates.TemplateResponse(request, "admin/article_form.html", _ctx(
         request, article=article, posters=posters, form=form,
         selected_poster_id=str(article.poster_id or ""),
@@ -198,7 +271,7 @@ def article_update(
 ):
     require_admin(request)
     kind = kind if kind in KINDS else "article"
-    with get_session() as s:
+    with get_article_session() as s:
         article = s.query(Article).get(article_id)
         if not article:
             return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
@@ -223,7 +296,7 @@ def article_update(
 @router.post("/articles/{article_id}/delete")
 def article_delete(request: Request, article_id: int):
     require_admin(request)
-    with get_session() as s:
+    with get_article_session() as s:
         article = s.query(Article).get(article_id)
         if article:
             s.delete(article)

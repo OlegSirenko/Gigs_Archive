@@ -59,3 +59,11 @@
   margin-bottom: 14px; font-size: 1rem; }
 
 @media (max-width: 720px) { .form-row { grid-template-columns: 1fr; } }
+
+/* --- Admin passwords (permanent, one-time reveal) --- */
+.code-block { background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; overflow-x: auto; font-size: .85rem; }
+.password-once { display: flex; align-items: center; gap: 10px; margin: 16px 0; }
+.password-once code { flex: 1; background: #14351f; color: #7ddea3;
+  border-radius: 10px; padding: 12px 14px; font-size: 1.05rem;
+  letter-spacing: .06em; word-break: break-all; user-select: all; }

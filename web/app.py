@@ -5,6 +5,8 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 
 from web.config import settings
+from web.articles_db import articles_db_path, init_articles_db
+from web.database import init_web_db
 from web.routes import public as public_routes
 from web.routes import admin as admin_routes
 
@@ -20,6 +22,13 @@ def create_app() -> FastAPI:
         docs_url=None, 
         redoc_url=None,
     )
+
+    # 0. Гарантируем существование таблиц:
+    #    - общая база бота (users, posters) — gigs_archive.db
+    #    - отдельная база статей (web_articles) — articles.db
+    # create_all() идемпотентен: уже созданные таблицы и данные не трогаются.
+    init_web_db()
+    init_articles_db()
 
     # 1. Подключение статических файлов (CSS, JS, картинки)
     static_dir = os.path.join(os.path.dirname(__file__), "..", "web_static")
@@ -64,7 +73,10 @@ def create_app() -> FastAPI:
     @app.get("/healthz", response_class=HTMLResponse, include_in_schema=False)
     def health():
         ok = os.path.isfile(settings.database_path)
-        return f"<pre>Gigs Archive web — DB: {settings.database_path} ({'found' if ok else 'not created yet'})</pre>"
+        ok_articles = os.path.isfile(articles_db_path)
+        return ("<pre>Gigs Archive web — DB: %s (%s) | Articles DB: %s (%s)</pre>"
+                % (settings.database_path, 'found' if ok else 'not created yet',
+                   articles_db_path, 'found' if ok_articles else 'not created yet'))
 
     # Отладочный вывод маршрутов
     print("\n=== ЗАРЕГИСТРИРОВАННЫЕ МАРШРУТЫ ===")

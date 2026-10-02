@@ -45,10 +45,10 @@
     --shadow-glow: 0 0 0 transparent;
 
     /* --- шрифты: печатная машинка + трафарет + газетный грифоновый --- */
-    --font-type: 'Special Elite', 'Courier New', Courier, monospace;
-    --font-stencil: 'Rubik Mono One', Impact, 'Arial Black', sans-serif;
-    --font-cut: 'Anton', Impact, 'Haettenschweiler', sans-serif;
-    --font-news: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    --font-type: 'Cousine', 'Courier New', Courier, monospace;
+    --font-stencil: Oswald, Impact, 'Arial Black', sans-serif;
+    --font-cut: Oswald, Impact, 'Haettenschweiler', sans-serif;
+    --font-news: 'PT Serif', Georgia, 'Times New Roman', serif;
 
     /* гранж-зерно (SVG-шум, без внешних файлов) */
     --grain-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
@@ -715,7 +715,7 @@ html { scroll-behavior: auto; }
 }
 
 /* ============ ЗАГОЛОВКИ АФИШ — тот же ransom-стиль, что и весь сайт ============
-   Раньше в _poster_card.html / poster_detail.html был просто капс Anton;
+   Раньше в _poster_card.html / poster_detail.html был просто капс Oswald;
    теперь они собираются из «вырезанных букв» (.ransomify + main.js). */
 .detail-title.ransomify {
     font-size: clamp(1.7rem, 4vw, 2.6rem);

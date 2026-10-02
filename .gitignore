@@ -1,9 +1,8 @@
-# Compiled and build artifacts
+# Compiled files
 __pycache__/
 *.pyc
 
-# Logs and temp files
-*.log
-*.tmp
-
-/web_static/uploads/*
+# Environment and secrets
+.env
+.env.local
+*.env.*

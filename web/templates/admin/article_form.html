@@ -72,6 +72,11 @@
   <textarea id="body" name="body" rows="18" required
             placeholder="Пустая строка = новый абзац. Поддерживаются **жирный**, *курсив* и обычные ссылки. Строка из одних --- становится разделителем. Картинки: ![подпись](/static/uploads/…) — вставляются через Ctrl+V или кнопку выше.">{{ form.get('body', '') }}</textarea>
 
+  <div id="bodyImages" class="body-images hidden">
+    <p class="hint">Картинки в тексте:</p>
+    <div id="bodyImagesList" class="body-images-list"></div>
+  </div>
+
   <div class="form-foot">
     <label class="checkbox">
       <input type="checkbox" name="publish" value="1"
@@ -102,6 +107,11 @@
     coverEl.value = url;
     updateCoverPreview(url);
   };
+  // URL превью-миниатюры для загруженных картинок (сервер делает <файл>_thumb.jpg)
+  const thumbMap = new Map();
+  function thumbFor(url) {
+    return thumbMap.get(url) || url;
+  }
   window.updateCoverPreview = function (url) {
     url = (url || "").trim();
     if (!url) {
@@ -111,7 +121,7 @@
     }
     // превью внешним URL доверяем только http(s); локальные пути — всегда ок
     if (/^https?:\/\//i.test(url) || url.startsWith("/static/") || url.startsWith("/uploads/")) {
-      previewImg.src = url;
+      previewImg.src = thumbFor(url);
       preview.classList.remove("hidden");
     } else {
       preview.classList.add("hidden");
@@ -150,12 +160,87 @@
         return null;
       }
       setStatus("Картинка загружена и сжата на сервере ✔");
+      if (data.preview_url && data.url) thumbMap.set(data.url, data.preview_url);
       return data;
     } catch (e) {
       setStatus("Не удалось загрузить картинку: " + e, true);
       return null;
     }
   }
+
+  // --- Превью картинок, вставленных в текст статьи ---------------------
+  const imagesWrap = document.getElementById("bodyImages");
+  const imagesList = document.getElementById("bodyImagesList");
+  const MD_IMG_RE = /!\[([^\]]*)\]\(\s*([^)\s]+)(?:\s+"[^"]*")?\s*\)/g;
+
+  function removeImage(url) {
+    // вычёркиваем ![..](url) из текста вместе с окружающими пустыми строками
+    const esc = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp("(?:\\n*)!\\[[^\\]]*\\]\\(\\s*" + esc +
+                          "(?:\\s+\"[^\"]*\")?\\s*\\)(?:\\n*)", "g");
+    bodyEl.value = bodyEl.value.replace(re, "\n\n").replace(/\n{3,}/g, "\n\n");
+    renderBodyImages();
+    bodyEl.focus();
+  }
+
+  function imageThumbSrc(url) {
+    if (thumbFor(url) !== url) return thumbFor(url);
+    // для картинок, уже сохранённых в статье: пробуем <файл>_thumb.jpg
+    const m = url.match(/^(\/static\/uploads\/.+\/[^/]+?)(\.[a-z]+)$/i);
+    if (m && /^\/static\/uploads\//i.test(url)) return m[1] + "_thumb" + m[2];
+    return url;
+  }
+
+  function onThumbError(img, fullUrl) {
+    if (img.src.indexOf("_thumb.") !== -1) img.src = fullUrl;
+  }
+
+  function renderBodyImages() {
+    const seen = [];
+    const urls = new Set();
+    let m;
+    MD_IMG_RE.lastIndex = 0;
+    while ((m = MD_IMG_RE.exec(bodyEl.value)) !== null) {
+      const url = m[2].replace(/^\.?(?=\/static\/)/, "");
+      if (urls.has(url)) continue;
+      urls.add(url);
+      seen.push({ alt: m[1], url });
+    }
+    imagesList.innerHTML = "";
+    if (!seen.length) {
+      imagesWrap.classList.add("hidden");
+      return;
+    }
+    for (const item of seen) {
+      const fig = document.createElement("figure");
+      fig.className = "body-image-item";
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.alt = item.alt || "";
+      img.title = item.url;
+      img.src = imageThumbSrc(item.url);
+      img.onerror = () => onThumbError(img, item.url);
+      fig.appendChild(img);
+      const cap = document.createElement("figcaption");
+      cap.textContent = item.alt || item.url.split("/").pop();
+      fig.appendChild(cap);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-mini body-image-remove";
+      btn.textContent = "✕";
+      btn.title = "Убрать картинку из текста";
+      btn.addEventListener("click", () => removeImage(item.url));
+      fig.appendChild(btn);
+      imagesList.appendChild(fig);
+    }
+    imagesWrap.classList.remove("hidden");
+  }
+
+  let bodyImgTimer = null;
+  bodyEl.addEventListener("input", () => {
+    clearTimeout(bodyImgTimer);
+    bodyImgTimer = setTimeout(renderBodyImages, 400);
+  });
 
   function insertAtCursor(text) {
     const start = bodyEl.selectionStart ?? bodyEl.value.length;
@@ -175,7 +260,7 @@
         e.preventDefault();
         const file = it.getAsFile();
         const data = await uploadImage(file);
-        if (data) insertAtCursor("\n\n" + data.snippet + "\n\n");
+        if (data) { insertAtCursor("\n\n" + data.snippet + "\n\n"); renderBodyImages(); }
         return;
       }
     }
@@ -186,7 +271,7 @@
   bodyFile.addEventListener("change", async () => {
     for (const file of bodyFile.files) {
       const data = await uploadImage(file);
-      if (data) insertAtCursor("\n\n" + data.snippet + "\n\n");
+      if (data) { insertAtCursor("\n\n" + data.snippet + "\n\n"); renderBodyImages(); }
     }
     bodyFile.value = "";
   });
@@ -211,6 +296,7 @@
   });
 
   updateCoverPreview(coverEl.value);
+  renderBodyImages();
 })();
 </script>
 {% endblock %}

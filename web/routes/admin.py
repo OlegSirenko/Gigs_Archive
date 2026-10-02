@@ -4,6 +4,9 @@ Access is restricted to web admins (ADMIN_USERNAMES / web/admins.json —
 Telegram usernames of the same people who moderate in the bot).
 """
 
+import asyncio
+import os
+import re
 from datetime import datetime
 
 from sqlalchemy.orm import noload
@@ -26,6 +29,7 @@ from web.image_storage import (
     ImageValidationError,
     delete_article_images,
     ensure_uploads_dir,
+    save_preview,
     save_upload,
 )
 from web.posters import first_line, poster_image_url
@@ -199,25 +203,62 @@ def _normalize_cover(value: str | None) -> str | None:
     return value or None
 
 
-def _relocate_draft_uploads(article_id: int):
-    """Переносит картинки из папки черновика (_draft) в папку статьи."""
-    import os
+_DRAFT_URL_RE_TEMPLATE = "/static/uploads/_draft/"
+
+
+def _rewrite_body_urls(body: str, article_id: int) -> str:
+    """Заменяет в тексте ссылки /static/uploads/_draft/<file> на <article_id>."""
+    if not body:
+        return body
+    return body.replace("/static/uploads/_draft/",
+                        f"/static/uploads/{article_id}/")
+
+
+def _relocate_draft_uploads(article_id: int, body: str = "",
+                            cover: str = ""):
+    """Переносит картинки из папки черновика (_draft) в папку статьи.
+
+    Перемещаются только файлы, на которые реально ссылается данная статья
+    (в тексте или в обложке), поэтому картинки чужого незавершённого
+    черновика не «уезжают». Возвращает пару (текст, обложка) уже со
+    ссылками на папку статьи — вызывающий код обязан сохранить оба
+    значения в БД, иначе страница начнёт отдавать 404 для перенесённых
+    файлов.
+    """
     from web.image_storage import UPLOADS_DIR
 
     src = os.path.join(UPLOADS_DIR, "_draft")
     if not os.path.isdir(src):
-        return
+        return body, cover
+    referenced = set(re.findall(r'/static/uploads/_draft/([^\s"\'<>)]+)',
+                                (body or "") + "\n" + (cover or "")))
+    if not referenced:
+        return body, cover
     dst = os.path.join(UPLOADS_DIR, str(article_id))
     os.makedirs(dst, exist_ok=True)
-    for name in os.listdir(src):
-        s_path = os.path.join(src, name)
-        d_path = os.path.join(dst, name)
-        if os.path.isfile(s_path):
-            try:
-                os.rename(s_path, d_path)
-            except OSError:
-                pass
+    for name in referenced:
+        # Превью-миниатюры редактора (<файл>_thumb.jpg) переносим вместе с
+        # оригиналом, иначе ссылка в черновике «повиснет» после публикации.
+        names = [name]
+        base, ext = os.path.splitext(name)
+        thumb = f"{base}_thumb{ext}"
+        if thumb not in referenced and os.path.isfile(
+                os.path.join(src, thumb)):
+            names.append(thumb)
+        for n in names:
+            s_path = os.path.join(src, os.path.basename(n))
+            d_path = os.path.join(dst, os.path.basename(n))
+            if os.path.isfile(s_path):
+                try:
+                    os.rename(s_path, d_path)
+                except OSError:
+                    pass
+    # Ссылки переписываем ВСЕГДА, когда файл был найден в _draft, — даже если
+    # сам rename не удался: старый URL всё равно ведёт в никуда.
+    body = _rewrite_body_urls(body, article_id)
+    cover = _rewrite_body_urls(cover, article_id)
     # Папка черновика остаётся — она снова понадобится следующей статье.
+    return body, cover
 
 
 @router.get("/articles/new")
@@ -262,8 +303,17 @@ def article_create(
         s.add(article)
         s.commit()
         new_id = article.id
-    # Переносим картинки, загруженные до создания статьи (время черновика).
-    _relocate_draft_uploads(new_id)
+        # Переносим картинки, загруженные до создания статьи (папка черновика),
+        # и заодно правим ссылки в тексте И в обложке — обе строки должны
+        # попасть в БД, иначе после переезда файлов страница отдаёт 404 по
+        # старым /_draft/ URL.
+        cover_now = article.cover_image_url or ""
+        moved_body, moved_cover = _relocate_draft_uploads(new_id, body,
+                                                          cover_now)
+        if moved_body != body or moved_cover != cover_now:
+            article.body = moved_body
+            article.cover_image_url = moved_cover or None
+            s.commit()
     return RedirectResponse(f"/admin/articles/{new_id}/edit?created=1", status_code=302)
 
 
@@ -359,19 +409,59 @@ async def upload_image(request: Request, file: UploadFile = File(...),
         return JSONResponse({"error": "unauthorized"}, status_code=401)
 
     ensure_uploads_dir()
-    subdir = article_id if article_id.isdigit() else "_draft"
+    # Псевдонимы MIME, которые реально присылают браузеры при вставке из
+    # буфера обмена (например image/jpg вместо image/jpeg).
+    _MIME_ALIASES = {
+        "image/jpg": "image/jpeg",
+        "image/pjpeg": "image/jpeg",
+        "image/x-png": "image/png",
+        "image/x-icon": "image/vnd.microsoft.icon",
+    }
+    declared_type = (file.content_type or "").split(";")[0].strip().lower()
+    declared_type = _MIME_ALIASES.get(declared_type, declared_type)
 
-    data = await file.read()
+    # Читаем файл ПОЛНОСТЬЮ и вне event loop: UploadFile в FastAPI/Starlette
+    # лежит на диске, и обычный `await file.read()` может вернуть пустые
+    # байты, если браузер уже «доел» поток (это и давало ошибку
+    # «Пустой файл» при Ctrl+V). read() здесь — синхронный файловый ввод,
+    # выносим его в тредпул.
+    def _read_all() -> bytes:
+        chunks = []
+        while True:
+            chunk = file.file.read(1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    data = await asyncio.to_thread(_read_all)
+
+    # Если браузер вообще не прислал Content-Type (или прислал мусор),
+    # подставляем тип по расширению файла — дальше save_upload всё равно
+    # проверит картинку по магическим байтам.
+    if not declared_type and file.filename:
+        ext = os.path.splitext(file.filename)[1].lower().lstrip(".")
+        declared_type = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
+                         "png": "image/png", "webp": "image/webp",
+                         "gif": "image/gif"}.get(ext, "")
+
     if len(data) > 10 * 1024 * 1024:
         return JSONResponse(
             {"error": "Файл слишком большой (максимум 10 МБ до сжатия)."},
             status_code=413)
 
+    subdir = article_id.strip() if article_id.strip().isdigit() else "_draft"
+
     try:
-        url = save_upload(data, content_type=file.content_type or "",
-                          subdir=subdir)
+        url = await asyncio.to_thread(
+            save_upload, data, declared_type, subdir)
     except ImageValidationError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+    # Маленькое превью для редактора (не тянем полномерную картинку ради
+    # миниатюры). Если превью создать не удалось — редактор покажет оригинал.
+    preview_url = await asyncio.to_thread(
+        save_preview, data, declared_type, subdir)
 
     alt = ""
     base = (file.filename or "").rsplit(".", 1)[0].strip()
@@ -379,4 +469,5 @@ async def upload_image(request: Request, file: UploadFile = File(...),
         alt = base[:80]
     snippet = f"![{alt}]({url})" if alt else f"![]({url})"
     size_kb = round(len(data) / 1024)
-    return JSONResponse({"url": url, "snippet": snippet, "original_kb": size_kb})
+    return JSONResponse({"url": url, "preview_url": preview_url or url,
+                         "snippet": snippet, "original_kb": size_kb})

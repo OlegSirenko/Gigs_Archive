@@ -35,6 +35,9 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024   # hard cap on what we read from the reques
 MAX_DIMENSION = 1600                  # longest side after downscale
 JPEG_QUALITY = 82                     # visual quality of the re-encoded file
 
+PREVIEW_DIMENSION = 320               # longest side of editor thumbnails
+PREVIEW_QUALITY = 70                  # quality of editor thumbnails
+
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 # Fallback when the browser sends no/misleading Content-Type (paste events do
@@ -145,6 +148,45 @@ def save_upload(data: bytes, content_type: str = "", subdir: str = "") -> str:
     return f"{prefix}/{name}"
 
 
+def save_preview(data: bytes, content_type: str = "", subdir: str = "") -> str | None:
+    """Генерирует маленький превью-файл (thumbnail) для уже загруженной картинки.
+
+    Превью сохраняется рядом с оригиналом под именем ``<оригинал>_thumb.jpg``
+    и используется редактором статей как миниатюра (чтобы не тянуть
+    полномерное изображение ради квадратика 160px). Возвращает URL превью или
+    None, если его создать не удалось (тогда редактор покажет оригинал).
+    """
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.load()
+    except Exception:
+        return None
+    try:
+        img = ImageOps.exif_transpose(img)
+    except Exception:
+        pass
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    img.thumbnail((PREVIEW_DIMENSION, PREVIEW_DIMENSION), Image.LANCZOS)
+    out = io.BytesIO()
+    try:
+        img.save(out, "JPEG", quality=PREVIEW_QUALITY, optimize=True,
+                 progressive=True)
+    except Exception:
+        return None
+
+    target_dir = os.path.join(UPLOADS_DIR, subdir) if subdir else UPLOADS_DIR
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    name = f"{stamp}-{secrets.token_hex(4)}_thumb.jpg"
+    try:
+        with open(os.path.join(target_dir, name), "wb") as f:
+            f.write(out.getvalue())
+    except OSError:
+        return None
+    prefix = f"{UPLOADS_URL_PREFIX}/{subdir}" if subdir else UPLOADS_URL_PREFIX
+    return f"{prefix}/{name}"
+
+
 def delete_article_images(article_id: int) -> int:
     """Remove all uploaded images belonging to an article. Returns file count."""
     folder = os.path.join(UPLOADS_DIR, str(article_id))
@@ -190,6 +232,20 @@ def prune_orphan_uploads(days: int = 7) -> int:
                     continue
                 rel = os.path.relpath(path, UPLOADS_DIR).replace(os.sep, "/")
                 if f"/{rel}" in haystack:  # still referenced by some article
+                    continue
+                # миниатюры редактора (<файл>_thumb.jpg) удаляем вместе с
+                # оригиналом: на них ссылки в тексте статей нет
+                if rel.endswith("_thumb.jpg"):
+                    base = rel[:-len("_thumb.jpg")] + ".jpg"
+                    if f"/{base}" in haystack:
+                        continue
+                    orig = os.path.join(root, os.path.basename(base))
+                    if not os.path.isfile(orig):
+                        try:
+                            os.remove(path)
+                            removed += 1
+                        except OSError:
+                            pass
                     continue
                 os.remove(path)
                 removed += 1

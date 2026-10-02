@@ -159,8 +159,10 @@
         (alt.trim() ? "<figcaption>" + alt + "</figcaption>" : "") + "</figure>");
     // разделители ---
     text = text.replace(/^[\s]*-{3,}[\s]*$/gm, '<hr class="article-sep">');
-    // блочные элементы (по строкам)
-    text = text.replace(/^#{1,6}\s+(.+)$/gm, '<h3 class="article-subhead">$1</h3>');
+    // блочные элементы (по строкам): # -> H1, ## -> H2, ###+ -> H3
+    text = text.replace(/^###\s+(.+)$/gm, '<h3 class="article-subhead">$1</h3>');
+    text = text.replace(/^##\s+(.+)$/gm, '<h2 class="article-subhead">$1</h2>');
+    text = text.replace(/^#\s+(.+)$/gm, '<h2 class="article-subhead">$1</h2>');
     text = text.replace(/^&gt;\s?(.*)$/gm, "<blockquote>$1</blockquote>");
     text = text.replace(/(?:^|\n)((?:[-•]\s+.+(?:\n|$))+)/g, (m, block) => {
       const items = block.trim().split("\n")
@@ -293,8 +295,45 @@
     syncingFromTextarea = true;
     editor.innerHTML = mdToPreviewHtml(bodyEl.value);
     bindEditorImages();
+    normalizeEditor();
     syncingFromTextarea = false;
     updatePlaceholder();
+  }
+
+  // Приводим DOM редактора к каноничному виду: без служебных zero-width
+  // пробелов, пустые абзацы удаляются. Если после этого редактор пуст —
+  // ставим курсор в начало (всё стёрто — возвращать некуда).
+  function normalizeEditor() {
+    const sel = window.getSelection();
+    const savedRange = sel && sel.rangeCount &&
+      editor.contains(sel.getRangeAt(0).startContainer)
+      ? sel.getRangeAt(0).cloneRange() : null;
+    const tw = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    const texts = [];
+    while (tw.nextNode()) texts.push(tw.currentNode);
+    for (const t of texts) {
+      const cleaned = t.textContent.replace(/\u200b/g, "");
+      if (cleaned !== t.textContent) t.textContent = cleaned;
+    }
+    editor.querySelectorAll("p").forEach((p) => {
+      if (!p.textContent.trim() && !p.querySelector("img, hr")) p.remove();
+    });
+    if (!editor.firstChild) {
+      try {
+        const r = document.createRange();
+        r.selectNodeContents(editor);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      } catch (e) { /* не критично */ }
+      return;
+    }
+    if (savedRange) {
+      try {
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+      } catch (e) { /* узлы могли измениться */ }
+    }
   }
 
   function updatePlaceholder() {
@@ -502,103 +541,290 @@
   }
   editor.addEventListener("paste", (e) => { pasteImageHandler(e); });
 
-  // --- Панель форматирования (как в Word, но для markdown) --------------
-  // Работают с markdown-разметкой в скрытом textarea и перерисовывают
-  // единое поле: так разметка остаётся видимой/редактируемой и в HTML.
-  function applyMdTransform(fn) {
-    const v = bodyEl.value;
-    const start = bodyEl.selectionStart ?? v.length;
-    const end = bodyEl.selectionEnd ?? start;
-    const res = fn(v, start, end);
-    bodyEl.value = res.value;
-    renderEditor();
-    try {
-      editor.focus();
-      const sel = window.getSelection();
-      const r = document.createRange();
-      const pos = findTextPos(editor, res.selStart);
-      r.setStart(pos.node, pos.offset);
-      if (res.selEnd != null && res.selEnd > res.selStart) {
-        const pe = findTextPos(editor, res.selEnd);
-        r.setEnd(pe.node, pe.offset);
-      } else {
-        r.collapse(true);
-      }
-      sel.removeAllRanges();
-      sel.addRange(r);
-    } catch (e) { /* фокус не критичен */ }
+  // --- Панель форматирования ---------------------------------------------
+  // Точечные изменения DOM: блок-форматирование (H2/H3/цитата/списки)
+  // меняет только затронутые блоки, остальной текст и курсор остаются на
+  // месте — никакой полной перерисовки, из-за которой текст «подводился»
+  // под первую строку.
+  function topBlock(node) {
+    let n = node && node.nodeType === Node.TEXT_NODE ? node.parentNode : node;
+    while (n && n.parentNode !== editor) n = n.parentNode;
+    return n && n.nodeType === Node.ELEMENT_NODE ? n : null;
   }
 
-  // Позиция N-го символа текста (в порядке обхода) -> {node, offset} в дереве
-  // редактора. Нужна, чтобы после перерисовки вернуть выделение на место.
-  function findTextPos(root, pos) {
-    let remaining = Math.max(0, pos);
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let node = walker.nextNode();
-    let last = null;
-    while (node) {
-      const len = node.textContent.length;
-      if (remaining <= len) return { node, offset: remaining };
-      remaining -= len;
-      last = node;
-      node = walker.nextNode();
+  function getSelRange() {
+    editor.focus();
+    const sel = window.getSelection();
+    if (!sel.rangeCount) {
+      const r = document.createRange();
+      r.selectNodeContents(editor);
+      r.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(r);
     }
-    if (last) return { node: last, offset: last.textContent.length };
-    return { node: root, offset: 0 };
+    return sel.getRangeAt(0);
+  }
+
+  // Блоки редактора, покрытые выделением (минимум — блок с курсором).
+  function coveredBlocks(range) {
+    const first = topBlock(range.startContainer);
+    const last = topBlock(range.endContainer);
+    if (!first) {
+      const p = document.createElement("p");
+      p.appendChild(document.createTextNode("\u200b"));
+      editor.appendChild(p);
+      return [p];
+    }
+    if (!last || first === last) return [first];
+    const out = [];
+    for (let n = first; n; n = n.nextElementSibling) {
+      out.push(n);
+      if (n === last) break;
+    }
+    return out.length ? out : [first];
+  }
+
+  function setRange(node, s, e) {
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(node, s);
+    r.setEnd(node, e);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+
+  // Оборачивает содержимое блока в inline-тег (или снимает его).
+  function toggleInline(tagName, placeholder) {
+    const range = getSelRange();
+    let block = topBlock(range.startContainer);
+    if (!block) {
+      block = document.createElement("p");
+      editor.appendChild(block);
+    }
+    if (range.collapsed) {
+      const el = document.createElement(tagName);
+      el.textContent = placeholder;
+      block.appendChild(el);
+      setRange(el.firstChild, 0, el.textContent.length);
+      syncFromEditor();
+      return;
+    }
+    const inTag = range.commonAncestorContainer.parentElement &&
+      range.commonAncestorContainer.parentElement.closest(tagName.toLowerCase());
+    if (inTag && block.contains(inTag)) {
+      // снять форматирование: заменяем <strong>текст</strong> -> текст
+      const inner = document.createRange();
+      inner.selectNodeContents(inTag);
+      const frag = inner.extractContents();
+      inTag.replaceWith(frag);
+      block.normalize();
+      const t = block.firstChild;
+      if (t && t.nodeType === Node.TEXT_NODE) setRange(t, 0, t.textContent.length);
+    } else {
+      const frag = range.extractContents();
+      const el = document.createElement(tagName);
+      el.appendChild(frag);
+      range.insertNode(el);
+      block.normalize();
+      setRange(el.firstChild, 0, el.textContent.length);
+    }
+    syncFromEditor();
+  }
+
+  // H2 / H3: превращает выбранные блоки в заголовки (повторное нажатие — обратно в абзац).
+  function toggleHeading(level) {
+    const range = getSelRange();
+    const blocks = coveredBlocks(range);
+    const allSame = blocks.every((b) => b.tagName === "H" + level);
+    const newTag = allSame ? "P" : "H" + level;
+    let firstNew = null;
+    for (const b of blocks) {
+      const el = document.createElement(newTag);
+      el.innerHTML = b.innerHTML;
+      b.replaceWith(el);
+      if (!firstNew) firstNew = el;
+    }
+    selectBlockContent(firstNew);
+    syncFromEditor();
+  }
+
+  // Цитата: выделяет блоки слева чертой; повторное нажатие снимает цитату.
+  function toggleQuote() {
+    const range = getSelRange();
+    const blocks = coveredBlocks(range);
+    const parentBq = blocks[0].closest && blocks[0].closest("blockquote");
+    if (parentBq && editor.contains(parentBq)) {
+      const frag = document.createDocumentFragment();
+      while (parentBq.firstChild) frag.appendChild(parentBq.firstChild);
+      parentBq.replaceWith(frag);
+      selectBlockContent(blocks[0]);
+    } else {
+      const bq = document.createElement("blockquote");
+      for (const b of blocks) bq.appendChild(b);
+      blocks[0].before(bq);
+      selectBlockContent(bq.firstElementChild);
+    }
+    syncFromEditor();
+  }
+
+  // Списки: каждый покрытый выделением блок становится пунктом списка.
+  // Остальные абзацы остаются нетронутыми (раньше весь текст попадал в список).
+  function toggleList(ordered) {
+    const range = getSelRange();
+    const blocks = coveredBlocks(range);
+    const tag = ordered ? "OL" : "UL";
+    // выделен список того же типа целиком -> снимаем форматирование
+    const fullList = blocks.length === 1 && blocks[0].tagName === tag;
+    if (fullList) {
+      const frag = document.createDocumentFragment();
+      for (const li of Array.from(blocks[0].children)) {
+        const p = document.createElement("p");
+        p.innerHTML = li.innerHTML;
+        frag.appendChild(p);
+      }
+      const firstP = frag.firstChild;
+      blocks[0].replaceWith(frag);
+      selectBlockContent(firstP);
+      syncFromEditor();
+      return;
+    }
+    const listEl = document.createElement(tag);
+    listEl.className = "article-list";
+    // курсор в пункте существующего списка -> добавляем новый пункт рядом
+    const curLi = blocks[0].tagName === "LI" ? blocks[0] : null;
+    if (curLi) {
+      const lst = curLi.closest("ul, ol");
+      const li = document.createElement("li");
+      li.appendChild(document.createTextNode("\u200b"));
+      if (lst) {
+        curLi.after(li);
+        selectBlockContent(li);
+      } else {
+        listEl.appendChild(li);
+        curLi.replaceWith(listEl);
+        selectBlockContent(li);
+      }
+      syncFromEditor();
+      return;
+    }
+    blocks[0].before(listEl);
+    let firstLi = null;
+    for (const b of blocks) {
+      const li = document.createElement("li");
+      if (b.tagName === "UL" || b.tagName === "OL") {
+        // переносим пункты существующего списка другого типа
+        for (const old of Array.from(b.children)) {
+          const nli = document.createElement("li");
+          nli.innerHTML = old.innerHTML;
+          listEl.appendChild(nli);
+          if (!firstLi) firstLi = nli;
+        }
+        b.remove();
+      } else {
+        li.innerHTML = b.innerHTML;
+        b.remove();
+        listEl.appendChild(li);
+        if (!firstLi) firstLi = li;
+      }
+    }
+    selectBlockContent(firstLi);
+    syncFromEditor();
+  }
+
+  // Горизонтальная линия: вставляется отдельным блоком в позиции курсора,
+  // текст до и после остаётся на своих местах.
+  function insertHr() {
+    const range = getSelRange();
+    const block = topBlock(range.startContainer);
+    const hr = document.createElement("hr");
+    hr.className = "article-sep";
+    if (block && !range.collapsed) {
+      const afterFrag = range.extractContents();
+      block.after(hr);
+      const p = document.createElement("p");
+      p.appendChild(afterFrag);
+      hr.after(p);
+      selectBlockContent(p);
+    } else if (block) {
+      const rest = splitBlock(block, range.startContainer, range.startOffset);
+      block.after(hr);
+      hr.after(rest);
+      selectBlockContent(rest);
+    } else {
+      editor.appendChild(hr);
+      const p = document.createElement("p");
+      p.appendChild(document.createTextNode("\u200b"));
+      editor.appendChild(p);
+      selectBlockContent(p);
+    }
+    syncFromEditor();
+  }
+
+  // Разрезает блок по позиции курсора; возвращает новый блок со второй частью.
+  function splitBlock(block, container, offset) {
+    const range = document.createRange();
+    range.setStart(container, offset);
+    range.setEnd(block, block.childNodes.length);
+    const frag = range.extractContents();
+    const p = document.createElement("p");
+    if (!frag.textContent.trim()) frag.appendChild(document.createTextNode("\u200b"));
+    p.appendChild(frag);
+    return p;
+  }
+
+  // Ссылка: оборачивает выделение в <a>, выделяет href для быстрого редактирования.
+  function makeLink() {
+    const range = getSelRange();
+    let textNode, hrefNode;
+    if (range.collapsed) {
+      const a = document.createElement("a");
+      a.href = "https://";
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = "текст ссылки";
+      topBlock(range.startContainer) ? range.insertNode(a) : editor.appendChild(a);
+      textNode = a.firstChild;
+      hrefNode = a;
+      setRange(textNode, 0, textNode.textContent.length);
+    } else {
+      const frag = range.extractContents();
+      const a = document.createElement("a");
+      a.href = "https://";
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.appendChild(frag);
+      range.insertNode(a);
+      textNode = a.firstChild;
+      hrefNode = a;
+    }
+    syncFromEditor();
+    if (textNode && textNode.parentNode) {
+      setRange(textNode, 0, textNode.textContent.length);
+    }
+  }
+
+  function selectBlockContent(el) {
+    if (!el) return;
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(r);
   }
 
   const FORMAT_ACTIONS = {
-    bold:   () => applyMdTransform(wrapMd("**", "**", "жирный")),
-    italic: () => applyMdTransform(wrapMd("*", "*", "курсив")),
-    strike: () => applyMdTransform(wrapMd("~~", "~~", "зачёркнуто")),
-    h2:     () => applyMdTransform(prefixMd("## ")),
-    h3:     () => applyMdTransform(prefixMd("### ")),
-    quote:  () => applyMdTransform(prefixMd("> ")),
-    ul:     () => applyMdTransform(prefixMd("- ")),
-    ol:     () => applyMdTransform(prefixMd("", true)),
-    hr:     () => applyMdTransform(insertMdBlock("---")),
-    link:   () => applyMdTransform(wrapMdLink()),
+    bold:   () => toggleInline("STRONG", "жирный"),
+    italic: () => toggleInline("EM", "курсив"),
+    strike: () => toggleInline("S", "зачёркнуто"),
+    h2:     () => toggleHeading(2),
+    h3:     () => toggleHeading(3),
+    quote:  () => toggleQuote(),
+    ul:     () => toggleList(false),
+    ol:     () => toggleList(true),
+    hr:     () => insertHr(),
+    link:   () => makeLink(),
   };
-
-  function wrapMd(before, after, placeholder) {
-    return (v, start, end) => {
-      const sel = v.slice(start, end) || placeholder || "";
-      return {
-        value: v.slice(0, start) + before + sel + after + v.slice(end),
-        selStart: start + before.length,
-        selEnd: start + before.length + sel.length,
-      };
-    };
-  }
-  function wrapMdLink() {
-    return (v, start, end) => {
-      const sel = v.slice(start, end) || "текст ссылки";
-      const value = v.slice(0, start) + "[" + sel + "](https://)" + v.slice(end);
-      const urlPos = start + sel.length + 3;   // позиция внутри https://
-      return { value, selStart: urlPos, selEnd: urlPos + 8 };
-    };
-  }
-  function prefixMd(prefix, numbered) {
-    return (v, start, end) => {
-      const ls = v.lastIndexOf("\n", start - 1) + 1;
-      let le = v.indexOf("\n", end);
-      if (le === -1) le = v.length;
-      const lines = v.slice(ls, le).split("\n");
-      const out = lines.map((l, i) =>
-        (numbered ? (i + 1) + ". " : prefix) + l.replace(/^\s*(?:[-*\u2022]\s+|\d+[.)]\s+)/, "")
-      ).join("\n");
-      return { value: v.slice(0, ls) + out + v.slice(le), selStart: ls, selEnd: ls + out.length };
-    };
-  }
-  function insertMdBlock(text) {
-    return (v, start, end) => {
-      const ins = "\n\n" + text + "\n\n";
-      return {
-        value: v.slice(0, start) + ins + v.slice(end),
-        selStart: start + ins.length, selEnd: start + ins.length,
-      };
-    };
-  }
 
   document.querySelectorAll("#editorToolbar [data-fmt]").forEach((btn) => {
     btn.addEventListener("click", () => {

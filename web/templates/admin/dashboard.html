@@ -14,6 +14,15 @@
   <div class="stat"><span>{{ stats.articles_published }} / {{ stats.articles_total }}</span><label>статей опубликовано / всего</label></div>
 </div>
 
+{% if admins_without_password %}
+<p class="flash flash-error">
+  У админов нет постоянного пароля и они не смогут войти:
+  {% for u in admins_without_password %}<code>@{{ u }}</code> {% endfor %}.
+  Выпустите пароли на странице <a href="/admin/admins">Админы</a> или командой
+  <code>python -m web.manage gen-passwords</code>.
+</p>
+{% endif %}
+
 <h2>Статьи</h2>
 {% if articles %}
 <table class="table">

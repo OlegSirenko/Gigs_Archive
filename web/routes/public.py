@@ -5,9 +5,10 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload, noload
 
+from web.articles_db import Article, get_article_session
 from web.auth import get_current_user
 from web.config import settings
-from web.database import ModerationStatus, Poster, User, Article, get_session
+from web.database import ModerationStatus, Poster, User, get_session
 from web.helpers import render_body
 from web.posters import first_line, telegram_post_link
 from web.helpers import poster_image_url
@@ -32,7 +33,19 @@ templates.env.filters["ru_date"] = i18n_web.ru_date
 templates.env.filters["ru_datetime"] = i18n_web.ru_datetime
 templates.env.filters["ru_date_short"] = i18n_web.ru_date_short
 templates.env.filters["kind_label"] = i18n_web.kind_label
-noload_poster = noload(Article.poster)
+
+
+def _attach_posters(articles):
+    """Articles live in a separate DB from posters, so the ORM relationship is
+    gone; load linked posters manually and attach them as a plain attribute
+    (readable by templates after the session is closed)."""
+    ids = {a.poster_id for a in articles if a.poster_id}
+    if not ids:
+        return
+    with get_session() as s:
+        by_id = {p.id: p for p in s.query(Poster).filter(Poster.id.in_(ids)).all()}
+    for a in articles:
+        a.poster = by_id.get(a.poster_id)
 
 def _ctx(request: Request, **extra):
     user = get_current_user(request)
@@ -115,12 +128,26 @@ def home(request: Request):
 
         total_events = s.query(Poster).filter(Poster.status == ModerationStatus.APPROVED).count()
 
+    # Последние опубликованные статьи — из отдельной БД статей (articles.db)
+    with get_article_session() as sa:
+        recent_articles = (
+            sa.query(Article)
+            .filter(Article.is_published.is_(True))
+            .order_by(Article.published_at.desc().nullslast(),
+                      Article.updated_at.desc())
+            .limit(3)
+            .all()
+        )
+        total_articles = (sa.query(Article)
+                          .filter(Article.is_published.is_(True)).count())
+
     return templates.TemplateResponse(request, "index.html", _ctx(
         request, 
         upcoming=upcoming,
         past_events=past_events, # Передаем новые данные
         total_events=total_events,
-        recent_articles=[], # Пустой список, чтобы секция статей просто скрылась
+        recent_articles=recent_articles,
+        total_articles=total_articles,
     ))
 
 
@@ -200,19 +227,16 @@ def articles_list(
     page: int = Query(1, ge=1),
     per_page: int = 12,
 ):
-    with get_session() as s:
+    with get_article_session() as s:
         query = s.query(Article).filter(Article.is_published.is_(True))
         if kind:
             query = query.filter(Article.kind == kind)
         total = query.count()
-        items = (
-            query.outerjoin(Poster, Article.poster_id == Poster.id)
-            .options(joinedload(Article.poster))
-            .order_by(Article.published_at.desc())
-            .offset((page - 1) * per_page)
-            .limit(per_page)
-            .all()
-        )
+        items = (query.order_by(Article.published_at.desc())
+                 .offset((page - 1) * per_page)
+                 .limit(per_page)
+                 .all())
+    _attach_posters(items)
     pages = max(1, (total + per_page - 1) // per_page)
     return templates.TemplateResponse(request, "articles.html", _ctx(
         request, articles=items, kind=kind, page=page, pages=pages, total=total,
@@ -220,15 +244,14 @@ def articles_list(
 
 @router.get("/articles/{slug}")
 def article_detail(request: Request, slug: str):
-    with get_session() as s:
+    with get_article_session() as s:
         article = (s.query(Article)
-                   .outerjoin(Poster, Article.poster_id == Poster.id)
-                   .options(joinedload(Article.poster))
                    .filter(
                        Article.slug == slug, Article.is_published.is_(True)
                    ).first())
         if not article:
             return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
+    _attach_posters([article])
     return templates.TemplateResponse(request, "article_detail.html", _ctx(
         request, article=article,
     ))
@@ -252,7 +275,7 @@ async def proxy_poster_image(poster_id: int):
     from web.config import settings
     
     # 1. Запрашиваем путь к файлу через Bot API (внутри сервера)
-    file_info_url = f"https://api.telegram.org/bot{settings.secret_key}/getFile"
+    file_info_url = f"https://api.telegram.org/bot{settings.bot_token}/getFile"
     
     async with httpx.AsyncClient() as client:
         file_resp = await client.get(file_info_url, params={"file_id": poster.photo_file_id})
@@ -264,7 +287,7 @@ async def proxy_poster_image(poster_id: int):
         file_path = file_data["result"]["file_path"]
         
         # 2. Скачиваем саму картинку с CDN Telegram (внутри сервера)
-        cdn_url = f"https://api.telegram.org/file/bot{settings.secret_key}/{file_path}"
+        cdn_url = f"https://api.telegram.org/file/bot{settings.bot_token}/{file_path}"
         img_resp = await client.get(cdn_url)
         
         if img_resp.status_code != 200:

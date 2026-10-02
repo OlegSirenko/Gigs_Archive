@@ -3,16 +3,16 @@ from web.config import settings
 
 def get_bot_api_image_url(photo_file_id: str) -> str | None:
     """Официальный способ получить ссылку через Bot API."""
-    if not photo_file_id or not settings.secret_key:
+    if not photo_file_id or not settings.bot_token:
         return None
     try:
         import requests
-        url = f"https://api.telegram.org/bot{settings.secret_key}/getFile"
+        url = f"https://api.telegram.org/bot{settings.bot_token}/getFile"
         response = requests.get(url, params={"file_id": photo_file_id}, timeout=5)
         data = response.json()
         if data.get("ok"):
             file_path = data["result"]["file_path"]
-            return f"https://api.telegram.org/file/bot{settings.secret_key}/{file_path}"
+            return f"https://api.telegram.org/file/bot{settings.bot_token}/{file_path}"
         return None
     except Exception as e:
         print(f"!!! [BOT API ERROR] {e}")

@@ -5,7 +5,8 @@
 <article class="detail article-detail">
   <header class="article-header">
     <span class="kind kind-{{ article.kind }}">{{ article.kind | kind_label }}</span>
-    <h1 class="ransomify" data-ransom="{{ article.title }}">{{ article.title }}</h1>
+    <!-- Заголовок — обычный текст (ransom-набор не читабелен) -->
+    <h1>{{ article.title }}</h1>
     {% if article.lead %}<p class="lead">{{ article.lead }}</p>{% endif %}
     <p class="meta muted">
       {% if article.published_at %}{{ article.published_at | ru_date }} · {% endif %}

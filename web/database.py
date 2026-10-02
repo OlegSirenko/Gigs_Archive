@@ -1,10 +1,11 @@
 """
-Web-layer database models & session factory.
+Web-layer database models & session factory (bot's shared SQLite DB).
 
-Reuses the existing SQLAlchemy Base (db.models) so that `init_db()` creates
-BOTH the bot tables (users, posters) and the new web tables (articles) in the
-SAME SQLite file the bot already uses. No data duplication — the site reads
-approved posters straight from the bot's DB.
+Contains ONLY the bot tables (users, posters) which the site reads directly —
+no data duplication.
+
+Articles (web_articles) live in a SEPARATE database file (articles.db);
+see web/articles_db.py for the Article model, engine and sessions.
 
 NOTE: we do NOT import db.models (it pulls in the bot's pydantic config which
 requires BOT_TOKEN etc.). Instead we re-declare the two shared tables here with
@@ -13,7 +14,6 @@ identical schema. The ORM only needs to know the columns it queries.
 
 import enum
 from contextlib import contextmanager
-from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
@@ -107,40 +107,7 @@ class Poster(Base):
         return f"<Poster {self.id} by User {self.user_id}>"
 
 
-# ============ NEW WEB TABLE: Articles (admin interviews / reviews) ============
-
-class Article(Base):
-    """Long-form admin content: musician interviews, event reviews, criticism."""
-
-    __tablename__ = "web_articles"
-
-    id = Column(Integer, primary_key=True)
-    title = Column(String(200), nullable=False)
-    slug = Column(String(220), nullable=False, unique=True, index=True)
-    lead = Column(Text, nullable=True)          # short intro shown in lists
-    body = Column(Text, nullable=False)         # the "big text" (markdown-ish plain text)
-    cover_image_url = Column(String, nullable=True)
-
-    kind = Column(String(30), default="article")  # article | interview | review
-    author_username = Column(String, nullable=True)  # admin who wrote it
-    poster_id = Column(Integer, ForeignKey("posters.id"), nullable=True)  # link to event
-
-    is_published = Column(Boolean, default=False, index=True)
-    published_at = Column(DateTime, nullable=True, index=True)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    poster = relationship("Poster", foreign_keys=[poster_id], lazy="raise_on_sql")
-
-    __table_args__ = (
-        Index('ix_web_articles_pub_kind', 'is_published', 'kind'),
-    )
-
-    def __repr__(self):
-        return f"<Article {self.id} '{self.title}'>"
-
-
-# ============ Engine / session (same SQLite file as the bot) ============
+# ============ Engine / session (bot's shared SQLite file) ============
 
 engine = create_engine(
     settings.database_url,
@@ -151,7 +118,8 @@ SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False,
 
 
 def init_web_db():
-    """Create web tables (+ bot tables if DB is empty) in the shared SQLite file."""
+    """Create bot tables (users, posters) in the shared SQLite file.
+    Articles live in a separate DB — see web/articles_db.init_articles_db()."""
     Base.metadata.create_all(bind=engine)
 
 

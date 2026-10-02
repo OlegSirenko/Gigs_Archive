@@ -92,6 +92,8 @@ class WebSettings:
             if u.strip()
         }
         self.admins_json_path = os.path.join(WEB_DIR, "admins.json")
+        # Permanent admin passwords (PBKDF2 hashes) — web/admin_passwords.json
+        self.admin_passwords_path = os.path.join(WEB_DIR, "admin_passwords.json")
 
         # --- Session cookie ---
         self.session_cookie_name = "gigs_session"
@@ -101,7 +103,7 @@ class WebSettings:
         self.site_title = os.environ.get("SITE_TITLE", "Gigs Archive")
         # Public Telegram channel username (links are built as https://t.me/<name>)
         self.telegram_channel = os.environ.get("TELEGRAM_CHANNEL", "GigsArchive")
-
+        self.bot_token = os.environ.get("BOT_TOKEN", "NONE")
         # --- Logo ---
         # The site logo lives in web_static/img/. If it is missing, the
         # `python -m web.logo` command downloads the channel's photo from
@@ -158,6 +160,28 @@ class WebSettings:
             current.append(username)
         with open(self.admins_json_path, "w", encoding="utf-8") as f:
             json.dump({"admins": current}, f, indent=2, ensure_ascii=False)
+
+    # ---------- permanent admin passwords ----------
+
+    def admin_password_hashes(self) -> dict:
+        """username -> password-hash record (web/admin_passwords.json)."""
+        try:
+            from web.passwords import AdminPasswordStore
+            return AdminPasswordStore(self.admin_passwords_path)._read()
+        except Exception:
+            return {}
+
+    def has_admin_password(self, username: str | None) -> bool:
+        if not username:
+            return False
+        return username.lstrip("@").lower() in self.admin_password_hashes()
+
+    def verify_admin_password(self, username: str | None, password: str | None) -> bool:
+        """True if `username` is an admin AND the password matches its hash."""
+        if not self.is_admin_username(username):
+            return False
+        from web.passwords import password_store
+        return password_store.verify(username, password)
 
     @property
     def poster_image_base(self) -> str:

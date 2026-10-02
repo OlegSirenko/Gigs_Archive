@@ -899,3 +899,10 @@ body.js-off .poster-placeholder span {
     .event-card, .poster-card { transform: none !important; }
     .event-card:hover, .poster-card:hover { transform: translateY(-4px) !important; }
 }
+
+/* Картинки, вставленные в текст статьи (Ctrl+V / загрузка файла) */
+.article-inline-figure { margin: 26px auto; max-width: 720px; }
+.article-inline-figure img { display: block; width: 100%; height: auto;
+  border: 3px solid var(--paper); box-shadow: 6px 7px 0 rgba(0,0,0,.55); }
+.article-inline-figure figcaption { font-size: .85rem; opacity: .75;
+  margin-top: 8px; text-align: center; font-style: italic; }

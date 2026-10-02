@@ -7,8 +7,8 @@ Telegram usernames of the same people who moderate in the bot).
 from datetime import datetime
 
 from sqlalchemy.orm import noload
-from fastapi import APIRouter, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from web.articles_db import Article, get_article_session
@@ -21,6 +21,13 @@ from web.auth import (
 from web.config import settings
 from web.database import ModerationStatus, Poster, get_session
 from web.helpers import slugify, unique_slug
+from web.image_storage import (
+    UPLOADS_URL_PREFIX,
+    ImageValidationError,
+    delete_article_images,
+    ensure_uploads_dir,
+    save_upload,
+)
 from web.posters import first_line, poster_image_url
 
 router = APIRouter(prefix="/admin")
@@ -186,6 +193,33 @@ def dashboard(request: Request):
 
 # ---------------- Article CRUD ----------------
 
+def _normalize_cover(value: str | None) -> str | None:
+    """Обложка: URL или путь к загруженной картинке (/static/uploads/…)."""
+    value = (value or "").strip()
+    return value or None
+
+
+def _relocate_draft_uploads(article_id: int):
+    """Переносит картинки из папки черновика (_draft) в папку статьи."""
+    import os
+    from web.image_storage import UPLOADS_DIR
+
+    src = os.path.join(UPLOADS_DIR, "_draft")
+    if not os.path.isdir(src):
+        return
+    dst = os.path.join(UPLOADS_DIR, str(article_id))
+    os.makedirs(dst, exist_ok=True)
+    for name in os.listdir(src):
+        s_path = os.path.join(src, name)
+        d_path = os.path.join(dst, name)
+        if os.path.isfile(s_path):
+            try:
+                os.rename(s_path, d_path)
+            except OSError:
+                pass
+    # Папка черновика остаётся — она снова понадобится следующей статье.
+
+
 @router.get("/articles/new")
 def article_new(request: Request):
     require_admin(request)
@@ -218,7 +252,7 @@ def article_create(
             slug=unique_slug(s, Article, slugify(title)),
             lead=lead.strip(),
             body=body,
-            cover_image_url=cover_image_url.strip() or None,
+            cover_image_url=_normalize_cover(cover_image_url),
             kind=kind,
             author_username=user.username,
             poster_id=int(poster_id) if poster_id.isdigit() else None,
@@ -228,6 +262,8 @@ def article_create(
         s.add(article)
         s.commit()
         new_id = article.id
+    # Переносим картинки, загруженные до создания статьи (время черновика).
+    _relocate_draft_uploads(new_id)
     return RedirectResponse(f"/admin/articles/{new_id}/edit?created=1", status_code=302)
 
 
@@ -283,7 +319,7 @@ def article_update(
         article.kind = kind
         article.lead = lead.strip()
         article.body = body
-        article.cover_image_url = cover_image_url.strip() or None
+        article.cover_image_url = _normalize_cover(cover_image_url)
         article.poster_id = int(poster_id) if poster_id.isdigit() else None
         was_published = article.is_published
         article.is_published = bool(publish)
@@ -301,4 +337,46 @@ def article_delete(request: Request, article_id: int):
         if article:
             s.delete(article)
             s.commit()
+    # Картинки статьи больше нигде не нужны — удаляем их с диска.
+    delete_article_images(article_id)
     return RedirectResponse("/admin", status_code=302)
+
+
+# ---------------- Image uploads (paste / file picker) ----------------
+
+@router.post("/upload-image")
+async def upload_image(request: Request, file: UploadFile = File(...),
+                       article_id: str = Form("")):
+    """Принимает картинку из буфера обмена или из проводника файлов.
+
+    Сжимает и сохраняет на сервер, возвращает JSON с готовым markdown-сниппетом
+    ``![alt](/static/uploads/<article_id>/<file>.jpg)``, который редактор
+    вставляет в текст статьи.
+    """
+    try:
+        require_admin(request)
+    except Exception:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    ensure_uploads_dir()
+    subdir = article_id if article_id.isdigit() else "_draft"
+
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        return JSONResponse(
+            {"error": "Файл слишком большой (максимум 10 МБ до сжатия)."},
+            status_code=413)
+
+    try:
+        url = save_upload(data, content_type=file.content_type or "",
+                          subdir=subdir)
+    except ImageValidationError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    alt = ""
+    base = (file.filename or "").rsplit(".", 1)[0].strip()
+    if base and not base.lower().startswith("image"):  # имя файла как подпись
+        alt = base[:80]
+    snippet = f"![{alt}]({url})" if alt else f"![]({url})"
+    size_kb = round(len(data) / 1024)
+    return JSONResponse({"url": url, "snippet": snippet, "original_kb": size_kb})

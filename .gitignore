@@ -7,3 +7,9 @@ node_modules/
 
 # Test artifacts
 testtmp/
+
+/web_static/uploads/*
+
+
+articles.db
+gigs_archive.db

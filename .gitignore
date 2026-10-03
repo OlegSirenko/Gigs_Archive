@@ -1,9 +1,5 @@
-# Python
-__pycache__/
-*.pyc
-
-# Node.js
+# Dependencies
 node_modules/
 
-# Test artifacts
-testtmp/
+# Compiled/Binary files
+__pycache__/

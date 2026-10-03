@@ -12,9 +12,9 @@
     {% if p.event_date %}
       <span class="date-badge">{{ p.event_date | ru_date_short }}</span>
     {% endif %}
-    {# «Скоро»: событие в ближайшие сутки, но ещё не наступило (учитывается время) #}
+    {# «Сегодня»: событие в ближайшие сутки, но ещё не наступило (учитывается время) #}
     {% if p.is_soon %}
-      <span class="event-soon-badge">Скоро</span>
+      <span class="event-soon-badge">Сегодня</span>
     {% endif %}
   </div>
   <div class="card-body">

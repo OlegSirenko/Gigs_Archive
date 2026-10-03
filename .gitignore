@@ -1,7 +1,9 @@
-.env
+# Compiled and build artifacts
+__pycache__/
 *.pyc
 
-*.db
-web/admin_passwords.json
-web/admin.json
+# Logs and temp files
+*.log
+*.tmp
 
+/web_static/uploads/*

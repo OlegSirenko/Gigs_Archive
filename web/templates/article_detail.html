@@ -3,6 +3,19 @@
 {% block content %}
 
 <article class="detail article-detail">
+
+  <!-- «Картинка к заголовку» — в самом верху страницы (как на realt.onliner.by) -->
+  {% if article.cover_image_url %}
+    <figure class="article-cover-img article-cover-top"><img src="{{ article.cover_image_url }}" alt=""></figure>
+  {% elif article.poster and (article.poster | posterimg) %}
+    <figure class="article-cover-img article-cover-top">
+      <img src="{{ article.poster | posterimg }}" alt="">
+      {% if article.poster.caption %}
+        <figcaption>Афиша: {{ article.poster.caption | firstline }}</figcaption>
+      {% endif %}
+    </figure>
+  {% endif %}
+
   <header class="article-header">
     <span class="kind kind-{{ article.kind }}">{{ article.kind | kind_label }}</span>
     <!-- Заголовок — обычный текст (ransom-набор не читабелен) -->
@@ -14,16 +27,8 @@
     </p>
   </header>
 
-  {% if article.cover_image_url %}
-    <figure class="article-cover-img"><img src="{{ article.cover_image_url }}" alt=""></figure>
-  {% elif article.poster and (article.poster | posterimg) %}
-    <figure class="article-cover-img">
-      <img src="{{ article.poster | posterimg }}" alt="">
-      {% if article.poster.caption %}
-        <figcaption>Афиша: {{ article.poster.caption | firstline }}</figcaption>
-      {% endif %}
-    </figure>
-  {% endif %}
+  <!-- Разделитель между шапкой (заголовок/лид) и текстом статьи -->
+  <hr class="article-sep article-sep-header">
 
   <div class="article-body">
     {{ article.body | renderbody | safe }}

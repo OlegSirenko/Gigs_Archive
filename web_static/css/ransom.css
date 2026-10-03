@@ -45,9 +45,10 @@
     --shadow-glow: 0 0 0 transparent;
 
     /* --- шрифты: печатная машинка + трафарет + газетный грифоновый --- */
-    --font-type: 'Special Elite', 'Courier New', Courier, monospace;
-    --font-stencil: 'Rubik Mono One', Impact, 'Arial Black', sans-serif;
-    --font-cut: 'Anton', Impact, 'Haettenschweiler', sans-serif;
+    /* Добавлены надежные кириллические фолбэки, сохраняющие эстетику */
+    --font-type: 'Special Elite', 'Courier Prime', 'PT Mono', 'Courier New', monospace;
+    --font-stencil: 'Rubik Mono One', 'Rubik', 'Oswald', Impact, 'Arial Black', sans-serif;
+    --font-cut: 'Anton', 'Oswald', Impact, 'Haettenschweiler', sans-serif;
     --font-news: 'Playfair Display', Georgia, 'Times New Roman', serif;
 
     /* гранж-зерно (SVG-шум, без внешних файлов) */

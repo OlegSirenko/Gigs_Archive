@@ -84,6 +84,8 @@
     <span class="tb-group">
       <button class="btn btn-mini tb-btn" type="button" id="insertImageBtn">🖼 Картинка…</button>
       <input id="bodyImageFile" type="file" accept="image/*" multiple hidden>
+      <button class="btn btn-mini tb-btn" type="button" id="importUrlBtn"
+              title="Вставить текст статьи по ссылке (Readability + html2text)">🌐 Импорт по URL</button>
     </span>
     <span class="tb-hint">Картинку из буфера (например, скопированную из Telegram)
       вставляйте прямо в редактор: <b>Ctrl+V</b></span>
@@ -111,6 +113,8 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Turndown (MIT, Doist): готовый движок HTML->markdown, локальная копия -->
+<script src="/static/js/turndown.js"></script>
 <script>
 (function () {
   "use strict";
@@ -299,10 +303,6 @@
     }
   }
 
-  function isBlock(el) {
-    return /^(P|DIV|H[1-6]|BLOCKQUOTE|UL|OL|LI|FIGURE|HR|PRE)$/.test(el.tagName);
-  }
-
   // Guard: если markdown-маркер оказывается в одной строке с предыдущим
   // текстом («текст## заголовок», «текст1. пункт»), браузер не создал новый
   // блок — добавляем перевод строки, чтобы серверный render_body увидел блок
@@ -312,77 +312,85 @@
                       "$1\n$2");
   }
 
-  // «##» не должен распадаться на отдельные строки («#\n# Текст»): склеиваем
-  // закрывающуюся последовательность решёток с последующим текстом.
-  function joinHeadingHashes(md) {
-    return md.replace(/(?:^|\n)((?:#[ \t]*\n)+)(#+)[ \t]*(?=\S)/g,
-      (m, lead, hashes) => "\n" + hashes + " ");
+  // HTML редактора -> markdown. Реализовано поверх Turndown (MIT, Doist) —
+  // того же движка, на котором построен turndown-plugin-gfm; локальная копия
+  // подключается до этого скрипта (web_static/js/turndown.js). Кастомные
+  // правила нужны только для наших классов/тегов; структура блоков и
+  // пустые строки между ними гарантируются движком, а не ручным обходом,
+  // поэтому переносы строк при сохранении больше не теряются.
+  let _turndownSvc = null;
+  function turndownService() {
+    if (_turndownSvc) return _turndownSvc;
+    const svc = new window.TurndownService({
+      headingStyle: "atx",
+      hr: "---",
+      bulletListMarker: "-",
+      codeStyle: "fenced",
+      emDelimiter: "*",
+      strongDelimiter: "**",
+      blankReplacement: "",
+    });
+    // зачёркнутый текст ~~как так~~ (правило из официального GFM-плагина)
+    svc.addRule("strikethrough", {
+      filter: ["del", "s", "strike"],
+      replacement: (content) => "~~" + content + "~~",
+    });
+    // картинки: ![подпись](url) отдельным блоком
+    svc.addRule("figureImg", {
+      filter: (node) => node.nodeName === "IMG" && !!node.getAttribute("src"),
+      replacement: (content, node) => {
+        const alt = (node.getAttribute("alt") || "").replace(/[[\]]/g, "");
+        let src = node.getAttribute("src") || "";
+        if (src.startsWith("data:")) src = "";  // локальный blob ещё не загружен
+        return src ? "\n\n![" + alt + "](" + src + ")\n\n" : "\n\n";
+      },
+    });
+    // служебный <figcaption> в markdown не попадает (подпись уже в alt)
+    svc.addRule("figcaptionDrop", {
+      filter: "figcaption",
+      replacement: () => "",
+    });
+    // ссылки — только безопасные схемы (как было раньше)
+    svc.addRule("safeLink", {
+      filter: (node) => node.nodeName === "A" && !!node.getAttribute("href"),
+      replacement: (content, node) => {
+        const href = node.getAttribute("href") || "";
+        if (!/^(https?:\/\/|\/static\/|\/uploads\/|\/)/i.test(href)) return content;
+        return "[" + content + "](" + href + ")";
+      },
+    });
+    // <br> внутри абзаца = перевод строки (server-side рендерит его как <br>)
+    svc.addRule("keepBr", {
+      filter: "br",
+      replacement: () => "\n",
+    });
+    // Заголовки: Turndown по умолчанию выдаёт «#\n# Текст» (каждый символ
+    // «#» — отдельный текстовый узел contenteditable). Пишем решётки сами,
+    // экранируя «#» в тексте, и добавляем нужное число пустых строк.
+    svc.addRule("atxHeading", {
+      filter: ["h1", "h2", "h3", "h4", "h5", "h6"],
+      replacement: (content, node) => {
+        const lvl = +node.nodeName.slice(1);
+        const text = content.trim().replace(/\\/g, "\\\\").replace(/#/g, "\\#");
+        return "\n\n" + "#".repeat(lvl) + " " + text + "\n\n";
+      },
+    });
+    _turndownSvc = svc;
+    return svc;
   }
 
   function htmlToMd(root) {
-    const parts = [];
-    // Буфер текущего абзаца: строки храним отдельно, «#»-маркеры в начале
-    // строки никогда не приклеиваются к предыдущей строке (иначе «##»
-    // превращалось бы в «#\n# Текст» и заголовок переставал быть блоком).
-    let buf = [""];
-    const pushStr = (s) => { s ? buf.push("", s) : buf.push(""); };
-    const append = (s) => { buf[buf.length - 1] += s; };
-    const flush = () => {
-      let b = joinHeadingHashes(buf.join("\n"));
-      b = ensureBlockBreak(b).replace(/\n{3,}/g, "\n\n").trim();
-      buf = [""];
-      if (b) parts.push(b + "\n\n");
-    };
-    function walk(node) {
-      for (const child of Array.from(node.childNodes)) {
-        if (child.nodeType === Node.TEXT_NODE) {
-          parts.push(child.textContent);
-          continue;
-        }
-        if (child.nodeType !== Node.ELEMENT_NODE) continue;
-        const tag = child.tagName;
-        if (tag === "BR") { parts.push("\n"); continue; }
-        if (!isBlock(child)) { parts.push(inlineNode(child)); continue; }
-        if (tag === "HR") { flush(); parts.push("---"); parts.push("\n\n"); continue; }
-        if (tag === "FIGURE") { flush(); parts.push(inlineMd(child)); parts.push("\n\n"); continue; }
-        if (tag === "UL" || tag === "OL") {
-          flush();
-          const lines = [];
-          let i = 0;
-          for (const li of child.children) {
-            if (li.tagName !== "LI") continue;
-            i += 1;
-            const txt = inlineMd(li).trim().replace(/\n+/g, " ");
-            lines.push((tag === "UL" ? "- " : i + ". ") + txt);
-          }
-          parts.push(lines.join("\n"));
-          parts.push("\n\n");
-          continue;
-        }
-        if (tag === "BLOCKQUOTE") {
-          flush();
-          const txt = inlineMd(child).trim();
-          parts.push(txt.split("\n").map((l) => "> " + l).join("\n"));
-          parts.push("\n\n");
-          continue;
-        }
-        if (/^H[1-6]$/.test(tag)) {
-          flush();
-          // как в серверном render_body: ## -> h2, ### -> h3 (без сдвига)
-          const hashes = "#".repeat(Math.min(+tag[1], 4));
-          parts.push(hashes + " " + inlineMd(child).trim());
-          parts.push("\n\n");
-          continue;
-        }
-        // P / DIV — обычный абзац
-        flush();
-        parts.push(inlineMd(child));
-        parts.push("\n\n");
-      }
-    }
-    walk(root);
-    flush();
-    return parts.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    // Turndown принимает строку HTML или DOM-узел; берём innerHTML редактора.
+    let md = turndownService().turndown(root.innerHTML);
+    // подстраховка на случай, если браузер склеил блок с текстом без
+    // перевода строки («текст## ещё») — сервер увидит блок на своей строке
+    md = ensureBlockBreak(md);
+    // нормализация вывода движка: «1.  текст» -> «1. текст», снятие
+    // экранирования заголовков, очистка пробельных строк
+    md = md.replace(/^(\d+)\.\s{2,}/gm, "$1. ")
+           .replace(/\\#/g, "#")
+           .replace(/^[ \t]+$/gm, "");
+    return md.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
   // --- синхронизация редактора и textarea ---------------------------------
@@ -957,6 +965,40 @@
       await uploadAndInsertImage(file);
     }
     bodyFile.value = "";
+  });
+
+  // Импорт статьи по URL: сервер извлекает текст готовым Readability и
+  // конвертирует в markdown готовым html2text — структура блоков (заголовки,
+  // списки, абзацы) сохраняется, переносы строк не теряются. Markdown
+  // добавляется в конец текста статьи; если редактор пуст — становится всем
+  // текстом, а заголовок страницы подставляется, если он ещё не заполнен.
+  document.getElementById("importUrlBtn").addEventListener("click", async () => {
+    const url = window.prompt("URL статьи для импорта:", "https://");
+    if (!url || !/^https?:\/\//i.test(url.trim())) return;
+    const btn = document.getElementById("importUrlBtn");
+    btn.disabled = true;
+    try {
+      const r = await fetch("/admin/import-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url.trim() }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || data.error) {
+        window.alert("Импорт не удался: " + (data.error || ("HTTP " + r.status)));
+        return;
+      }
+      const importedMd = String(data.body || "");
+      bodyEl.value = bodyEl.value.trim()
+        ? bodyEl.value.replace(/\s+$/, "") + "\n\n" + importedMd
+        : importedMd;
+      const titleEl = document.getElementById("title");
+      if (data.title && !titleEl.value.trim()) titleEl.value = data.title;
+      renderEditor();
+      syncFromEditor();
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   // Обложка: файл из проводника или Ctrl+V в поле URL

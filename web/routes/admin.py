@@ -24,6 +24,7 @@ from web.auth import (
 from web.config import settings
 from web.database import ModerationStatus, Poster, get_session
 from web.helpers import slugify, unique_slug
+from web.article_import import fetch_article_md
 from web.image_storage import (
     UPLOADS_URL_PREFIX,
     ImageValidationError,
@@ -393,6 +394,32 @@ def article_delete(request: Request, article_id: int):
 
 
 # ---------------- Image uploads (paste / file picker) ----------------
+
+@router.post("/import-url")
+async def import_url(request: Request):
+    """Импорт статьи по URL: готовый Readability + html2text возвращают
+    заголовок и markdown с сохранённой блочной структурой (переносы строк
+    не теряются). Ответ: {"title": ..., "body": ...}."""
+    try:
+        require_admin(request)
+    except Exception:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    url = (payload.get("url") or "").strip()
+    if not url:
+        return JSONResponse({"error": "Укажите URL статьи"}, status_code=400)
+    try:
+        title, body = fetch_article_md(url)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"error": f"Не удалось загрузить страницу: {e}"},
+                            status_code=502)
+    return JSONResponse({"title": title, "body": body})
+
 
 @router.post("/upload-image")
 async def upload_image(request: Request, file: UploadFile = File(...),

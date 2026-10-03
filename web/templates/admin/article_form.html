@@ -150,44 +150,121 @@
   }
 
   // --- markdown (текст textarea) -> HTML для редактора/предпросмотра -----
-  function mdToPreviewHtml(src) {
-    let text = escHtml(src || "");
-    // блоки картинок -> <figure><img> (видно и как выглядит, и подпись)
-    text = text.replace(/!\[([^\]]*)\]\(\s*([^)\s]+)(?:\s+&quot;[^&]*&quot;)?\s*\)/g,
+  // Парсер работает построчно (как серверный render_body): заголовок/список/
+  // цитата распознаются только в начале строки, поэтому «слипшиеся» строки
+  // вида «текст## ещё» без перевода строки не склеиваются в один заголовок,
+  // а переносы строк внутри абзаца сохраняются.
+  function inlineMdHtml(s) {
+    let t = s;
+    // картинки -> <figure><img> (видно и как выглядит, и подпись)
+    t = t.replace(/!\[([^\]]*)\]\(\s*([^)\s]+)(?:\s+"[^"]*")?\s*\)/g,
       (m, alt, url) => "<figure class=\"article-inline-figure\"><img src=\"" + url +
         "\" data-full=\"" + url + "\" alt=\"" + alt + "\" loading=\"lazy\">" +
         (alt.trim() ? "<figcaption>" + alt + "</figcaption>" : "") + "</figure>");
-    // разделители ---
-    text = text.replace(/^[\s]*-{3,}[\s]*$/gm, '<hr class="article-sep">');
-    // блочные элементы (по строкам): # -> H1, ## -> H2, ###+ -> H3
-    text = text.replace(/^###\s+(.+)$/gm, '<h3 class="article-subhead">$1</h3>');
-    text = text.replace(/^##\s+(.+)$/gm, '<h2 class="article-subhead">$1</h2>');
-    text = text.replace(/^#\s+(.+)$/gm, '<h2 class="article-subhead">$1</h2>');
-    text = text.replace(/^&gt;\s?(.*)$/gm, "<blockquote>$1</blockquote>");
-    text = text.replace(/(?:^|\n)((?:[-•]\s+.+(?:\n|$))+)/g, (m, block) => {
-      const items = block.trim().split("\n")
-        .map((l) => "<li>" + l.replace(/^[-•]\s+/, "") + "</li>").join("");
-      return "\n<ul class=\"article-list\">" + items + "</ul>\n";
-    });
-    text = text.replace(/(?:^|\n)((?:\d+[.)]\s+.+(?:\n|$))+)/g, (m, block) => {
-      const items = block.trim().split("\n")
-        .map((l) => "<li>" + l.replace(/^\d+[.)]\s+/, "") + "</li>").join("");
-      return "\n<ol class=\"article-list\">" + items + "</ol>\n";
-    });
-    // inline-разметка
-    text = text.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
-    text = text.replace(/__([^_\n]+)__/g, "<strong>$1</strong>");
-    text = text.replace(/(^|[^\w*])\*([^*\n]+)\*(?![\w*])/g, "$1<em>$2</em>");
-    text = text.replace(/~~([^~\n]+)~~/g, "<s>$1</s>");
-    text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|\/static\/[^)\s]+)\)/g,
+    t = t.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+    t = t.replace(/__([^_\n]+)__/g, "<strong>$1</strong>");
+    t = t.replace(/(^|[^\w*])\*([^*\n]+)\*(?![\w*])/g, "$1<em>$2</em>");
+    t = t.replace(/~~([^~\n]+)~~/g, "<s>$1</s>");
+    t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|\/static\/[^)\s]+)\)/g,
       '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-    // абзацы: пустая строка = новый <p>
-    return text.split(/\n\s*\n/).map((p) => {
-      p = p.trim();
-      if (!p) return "";
-      if (/^(?:<(?:figure|hr|h\d|blockquote|ul|ol)|<hr)/i.test(p)) return p;
-      return "<p>" + p.replace(/\n/g, "<br>") + "</p>";
-    }).join("\n");
+    return t;
+  }
+
+  function isListLine(l, ordered) {
+    return ordered ? /^\d+[.)]\s+\S/.test(l) : /^[-•]\s+\S/.test(l);
+  }
+
+  function mdToPreviewHtml(src) {
+    const lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
+    const out = [];
+    let para = [];   // строки текущего абзаца (уже HTML)
+    let quote = [];
+    let list = null; // {ordered, items:[html]}
+
+    // Абзац markdown-строк -> <p>; переводы строк сохраняются через <br>.
+    // Если среди строк затесался блочный маркер (заголовок/список/цитата),
+    // абзац режется на его границах — «текст## ещё» без переноса строки не
+    // склеивается в один заголовок (так делает и серверный render_body).
+    const BLOCK_RE = /^(\s*)(#{1,6}\s+\S.*|[-•]\s+\S.*|\d+[.)]\s+\S.*|>\s*.*)$/;
+    const pushPara = (ls) => {
+      if (!ls.length) return;
+      out.push("<p>" + ls.join("<br>") + "</p>");
+    };
+    const flushPara = () => {
+      if (!para.length) return;
+      const ls = para;
+      para = [];
+      if (!ls.some((l) => BLOCK_RE.test(l))) { pushPara(ls); return; }
+      let cur = [];
+      for (const l of ls) {
+        const m = l.match(BLOCK_RE);
+        if (m) {
+          pushPara(cur); cur = [];
+          emitBlock(m[2]);
+        } else {
+          cur.push(l);
+        }
+      }
+      pushPara(cur);
+    };
+    // одна markdown-строка блока -> готовый HTML-блок в out
+    const emitBlock = (t) => {
+      const hm = t.match(/^(#{1,6})\s+(\S.*)$/);
+      if (hm) {
+        // как в серверном render_body: ## -> h2, ### -> h3
+        const lvl = Math.min(hm[1].length, 4);
+        out.push("<h" + lvl + " class=\"article-subhead\">" +
+          inlineMdHtml(hm[2]) + "</h" + lvl + ">");
+        return;
+      }
+      if (isListLine(t, false) || isListLine(t, true)) {
+        const ordered = isListLine(t, true);
+        if (list && list.ordered !== ordered) flushList();
+        if (!list) list = { ordered: ordered, items: [] };
+        list.items.push(inlineMdHtml(t.replace(/^\s*(?:[-•]|\d+[.)])\s+/, "")));
+        return;
+      }
+      if (/^>/.test(t)) {
+        quote.push(inlineMdHtml(t.replace(/^\s*>+ ?/, "")));
+        return;
+      }
+      para.push(inlineMdHtml(t));
+    };
+    const flushQuote = () => {
+      if (!quote.length) return;
+      out.push("<blockquote>" + quote.join("<br>") + "</blockquote>");
+      quote = [];
+    };
+    const flushList = () => {
+      if (!list) return;
+      const tag = list.ordered ? "ol" : "ul";
+      out.push("<" + tag + " class=\"article-list\">" +
+        list.items.map((x) => "<li>" + x + "</li>").join("") +
+        "</" + tag + ">");
+      list = null;
+    };
+    const flushAll = () => { flushPara(); flushQuote(); flushList(); };
+
+    for (const raw of lines) {
+      const t = raw.trim();
+      if (!t) { flushAll(); continue; }
+      if (/^#{1,6}\s+\S/.test(t)) { flushPara(); flushQuote(); emitBlock(t); continue; }
+      if (/^-{3,}$/.test(t)) { flushAll(); out.push('<hr class="article-sep">'); continue; }
+      if (/^>/.test(t)) { flushPara(); flushList(); emitBlock(t); continue; }
+      if (isListLine(t, false) || isListLine(t, true)) {
+        flushPara(); flushQuote(); emitBlock(t); continue;
+      }
+      // картинка отдельной строкой — свой блок, без обёртки <p>
+      if (/^!\[[^\]]*\]\([^)]*\)$/.test(t)) {
+        flushAll();
+        out.push(inlineMdHtml(t));
+        continue;
+      }
+      flushQuote(); flushList();
+      para.push(inlineMdHtml(escHtml(raw)));
+    }
+    flushAll();
+    return out.join("\n");
   }
 
   // --- HTML редактора -> markdown ----------------------------------------
@@ -226,12 +303,35 @@
     return /^(P|DIV|H[1-6]|BLOCKQUOTE|UL|OL|LI|FIGURE|HR|PRE)$/.test(el.tagName);
   }
 
+  // Guard: если markdown-маркер оказывается в одной строке с предыдущим
+  // текстом («текст## заголовок», «текст1. пункт»), браузер не создал новый
+  // блок — добавляем перевод строки, чтобы серверный render_body увидел блок
+  // на отдельной строке и переносы строк не терялись при сохранении.
+  function ensureBlockBreak(md) {
+    return md.replace(/([^\s])((?:#{1,6}\s|[-•]\s+|\d+[.)]\s+|>\s)\S)/g,
+                      "$1\n$2");
+  }
+
+  // «##» не должен распадаться на отдельные строки («#\n# Текст»): склеиваем
+  // закрывающуюся последовательность решёток с последующим текстом.
+  function joinHeadingHashes(md) {
+    return md.replace(/(?:^|\n)((?:#[ \t]*\n)+)(#+)[ \t]*(?=\S)/g,
+      (m, lead, hashes) => "\n" + hashes + " ");
+  }
+
   function htmlToMd(root) {
     const parts = [];
+    // Буфер текущего абзаца: строки храним отдельно, «#»-маркеры в начале
+    // строки никогда не приклеиваются к предыдущей строке (иначе «##»
+    // превращалось бы в «#\n# Текст» и заголовок переставал быть блоком).
+    let buf = [""];
+    const pushStr = (s) => { s ? buf.push("", s) : buf.push(""); };
+    const append = (s) => { buf[buf.length - 1] += s; };
     const flush = () => {
-      const b = parts.join("").replace(/\n{3,}/g, "\n\n").trim();
-      parts.length = 0;
-      if (b) parts.push(b);
+      let b = joinHeadingHashes(buf.join("\n"));
+      b = ensureBlockBreak(b).replace(/\n{3,}/g, "\n\n").trim();
+      buf = [""];
+      if (b) parts.push(b + "\n\n");
     };
     function walk(node) {
       for (const child of Array.from(node.childNodes)) {
@@ -268,7 +368,9 @@
         }
         if (/^H[1-6]$/.test(tag)) {
           flush();
-          parts.push("#".repeat(+tag[1]) + " " + inlineMd(child).trim());
+          // как в серверном render_body: ## -> h2, ### -> h3 (без сдвига)
+          const hashes = "#".repeat(Math.min(+tag[1], 4));
+          parts.push(hashes + " " + inlineMd(child).trim());
           parts.push("\n\n");
           continue;
         }
@@ -290,6 +392,13 @@
     bodyEl.value = htmlToMd(editor);
     updatePlaceholder();
   }
+
+  // Кнопка «обновить предпросмотр»: перестраивает HTML редактора из textarea
+  // (например, после вставки markdown-текста напрямую) с сохранением позиции
+  // курсора — полная перезапись поля больше не нужна на каждый ввод.
+  window.refreshEditor = function () {
+    renderEditor();
+  };
 
   function renderEditor() {
     syncingFromTextarea = true;

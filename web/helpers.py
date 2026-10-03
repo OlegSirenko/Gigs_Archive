@@ -182,13 +182,13 @@ def _render_blocks(p: str) -> str:
     иначе — None (абзац остаётся обычным текстом).
     """
     lines = p.split("\n")
-    # подзаголовки: «## Текст» (## -> h3, ### -> h4 и т.д.)
+    # подзаголовки: «## Текст» (## -> h2, ### -> h3 — как в редакторе статьи)
     if all(re.match(r"^\s*#{1,6}\s+", l) for l in lines if l.strip()):
         out = []
         for l in lines:
             m = re.match(r"^\s*(#{1,6})\s+(.+?)\s*$", l)
             if m:
-                lvl = min(len(m.group(1)) + 1, 5)
+                lvl = min(len(m.group(1)), 4)
                 out.append(f'<h{lvl} class="article-subhead">{m.group(2)}</h{lvl}>')
         return "\n".join(out)
     # цитаты: каждая непустая строка начинается с «>»

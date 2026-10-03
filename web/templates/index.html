@@ -109,8 +109,8 @@
                         <span class="event-date-badge">{{ p.event_date | ru_date_short }}</span>
                     {% endif %}
                     {% if p.is_soon %}
-                        <!-- Зелёный бейдж «Скоро» — справа, симметрично дате -->
-                        <span class="event-soon-badge">Скоро</span>
+                        <!-- Зелёный бейдж «Сегодня» — справа, симметрично дате -->
+                        <span class="event-soon-badge">Сегодня</span>
                     {% endif %}
                 </div>
                 <div class="event-card-body">
@@ -187,24 +187,8 @@
         
         {% if recent_articles %}
         <div class="articles-grid">
-            {% for a in recent_articles %}
-            <a href="/articles/{{ a.slug }}" class="article-card reveal">
-                <span class="article-category">{{ a.kind | kind_label }}</span>
-                <!-- Заголовок статьи — обычный текст (ransom-набор не читабелен) -->
-                <h3 class="article-title">{{ a.title }}</h3>
-                <p class="article-excerpt">
-                    {% if a.lead %}
-                        {{ a.lead[:160] }}{% if a.lead|length > 160 %}…{% endif %}
-                    {% else %}
-                        Читайте полный текст статьи...
-                    {% endif %}
-                </p>
-                <div class="article-footer">
-                    <span class="article-date">{{ a.published_at | ru_date }}</span>
-                    <span class="article-read-more">Читать →</span>
-                </div>
-            </a>
-            {% endfor %}
+            <!-- Карточки статей — тот же разметка-шаблон, что и на /articles -->
+            {% for a in recent_articles %}{% include "_article_card.html" %}{% endfor %}
         </div>
         {% else %}
         <div class="empty">
@@ -267,13 +251,13 @@
 <footer class="footer">
     <div class="footer-container">
         <div class="footer-left">
-            <span>🎭</span>
+            <span></span>
             <span>© 2026 Gigs Archive. Сделано с любовью к музыке.</span>
         </div>
         <div class="footer-links">
             <a href="https://github.com/OlegSirenko/Gigs_Archive" target="_blank">GitHub</a>
             <a href="https://t.me/{{ telegram_channel }}" target="_blank">Telegram</a>
-            <a href="/admin">Админ-панель</a>
+            <a href="/admin">I'm Admin</a>
         </div>
     </div>
 </footer>

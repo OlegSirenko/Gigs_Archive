@@ -15,7 +15,7 @@
 
 1.2. Контактные данные Оператора:
 - **Telegram:** t.me/GigsArchive?direct
-- **Email:** olegsirenko.job@example.com
+- **Email:** olegsirenko.job@gmail.com
 
 1.3. Оператор обязан обеспечить безопасность персональных данных при их обработке в соответствии со ст. 17 Закона № 99-З.
 

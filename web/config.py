@@ -93,6 +93,16 @@ class WebSettings:
         self.web_database_path = wdb
         self.web_database_url = f"sqlite:///{wdb}"
 
+        # --- Sync policy: gigs_archive.db -> posters_web.db ---
+        # posters_web.db is refreshed from the bot DB at three trigger points:
+        #   1. on web app startup (web/app.py);
+        #   2. admin panel button POST /admin/posters/sync;
+        #   3. lazily on public page requests, at most once every N minutes
+        #      (web/routes/public.py::_refresh_web_db_throttled).
+        # Set to 0 to disable trigger point 3 (startup + admin only).
+        self.sync_min_interval_minutes = int(
+            os.environ.get("WEB_SYNC_MIN_INTERVAL", "5"))
+
         # --- "Canceled" watermark over poster images ---
         # Word drawn diagonally in red on the poster picture of a cancelled
         # event (see web/cancelled_images.py). Editable in the admin panel

@@ -198,7 +198,9 @@ def init_web_db():
     create_all() is idempotent: existing tables/rows are left untouched.
     Articles live in their own DB — see web/articles_db.init_articles_db()."""
     Base.metadata.create_all(bind=engine)
-    WebPoster.__table__.create(bind=web_engine)
+    # checkfirst=True: идемпотентно — не падать, если таблица уже создана
+    # (например, при повторном вызове init_web_db в том же процессе).
+    WebPoster.__table__.create(bind=web_engine, checkfirst=True)
 
 
 @contextmanager

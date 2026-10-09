@@ -1,6 +1,7 @@
 import os
+import time
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse  # <-- ДОБАВЬТЕ RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
@@ -9,7 +10,8 @@ from sqlalchemy.orm import joinedload, noload
 from web.articles_db import Article, get_article_session
 from web.auth import get_current_user
 from web.config import settings
-from web.database import ModerationStatus, Poster, User, get_session
+from web.database import (ModerationStatus, Poster, User, get_session,
+                          sync_web_posters)
 from web.cancelled_images import (cancelled_image_url, get_cancelled_label,
                                   is_cancelled, render_and_cache)
 from web.helpers import attach_cancel_flags, render_body
@@ -37,6 +39,9 @@ templates.env.filters["ru_datetime"] = i18n_web.ru_datetime
 templates.env.filters["ru_date_short"] = i18n_web.ru_date_short
 templates.env.filters["kind_label"] = i18n_web.kind_label
 
+# Last successful lazy-sync timestamp (see _refresh_web_db_throttled).
+_last_web_sync_ts: float | None = None
+
 
 def _attach_posters(articles):
     """Articles live in a separate DB from posters, so the ORM relationship is
@@ -49,6 +54,36 @@ def _attach_posters(articles):
         by_id = {p.id: p for p in s.query(Poster).filter(Poster.id.in_(ids)).all()}
     for a in articles:
         a.poster = by_id.get(a.poster_id)
+
+def _refresh_web_db_throttled() -> None:
+    """Lazy sync of posters_web.db from the bot DB (gigs_archive.db).
+
+    Trigger points for updating posters_web.db:
+      1. App startup (web/app.py) — full sync when the site boots;
+      2. Admin panel "Синхронизировать" button (POST /admin/posters/sync);
+      3. THIS one — on public page requests, at most once every
+         WEB_SYNC_MIN_INTERVAL minutes (default 5), so freshly approved
+         events appear on the site even if nobody restarts it or clicks
+         the button. The sync is cheap (one indexed SELECT + upserts of
+         rows that actually changed) and idempotent.
+    Set WEB_SYNC_MIN_INTERVAL=0 to disable request-time syncing entirely.
+    Never touches gigs_archive.db; cancel flags in the web DB are preserved.
+    """
+    global _last_web_sync_ts
+    min_interval = max(0, int(settings.sync_min_interval_minutes)) * 60
+    if min_interval == 0:
+        return
+    now = time.monotonic()
+    if _last_web_sync_ts and (now - _last_web_sync_ts) < min_interval:
+        return
+    _last_web_sync_ts = now  # set BEFORE the work so failures don't retry per-request
+    try:
+        added = sync_web_posters()
+        if added:
+            print(f"[web] lazy sync: {added} new event(s) copied to posters_web.db")
+    except Exception as exc:
+        print(f"[web] lazy sync skipped: {exc}")
+
 
 def _ctx(request: Request, **extra):
     user = get_current_user(request)
@@ -97,6 +132,9 @@ def _event_dt(p: Poster):
 # ---------------- Home (Главная страница) ----------------
 @router.get("/")
 def home(request: Request):
+    # Обновляем posters_web.db из базы бота не чаще раза в
+    # WEB_SYNC_MIN_INTERVAL минут (см. _refresh_web_db_throttled).
+    _refresh_web_db_throttled()
     now = datetime.now()
     with get_session() as s:
         approved = s.query(Poster).filter(Poster.status == ModerationStatus.APPROVED)

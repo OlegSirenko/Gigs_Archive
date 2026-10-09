@@ -1,1 +1,11 @@
-(empty)
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Database files
+*.db
+
+# Environment files
+.env
+.env.local
+.env.*.local

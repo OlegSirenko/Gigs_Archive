@@ -82,6 +82,31 @@ class WebSettings:
         self.database_path = db_path
         self.database_url = f"sqlite:///{db_path}"
 
+        # --- Web-only database (posters_web.db) ---
+        # The site keeps its own small DB for the events it displays: only the
+        # APPROVED ones are copied here, with the few columns the web needs
+        # (id / caption / event_date / is_cancelled). This file is written by
+        # the WEB APP ONLY — the bot never sees it.
+        wdb = os.environ.get("WEB_POSTERS_DATABASE_PATH", "posters_web.db")
+        if not os.path.isabs(wdb):
+            wdb = os.path.join(PROJECT_ROOT, wdb)
+        self.web_database_path = wdb
+        self.web_database_url = f"sqlite:///{wdb}"
+
+        # --- "Canceled" watermark over poster images ---
+        # Word drawn diagonally in red on the poster picture of a cancelled
+        # event (see web/cancelled_images.py). Editable in the admin panel
+        # (settings table inside posters_web.db); this env value is the default.
+        self.cancelled_label_ru = os.environ.get(
+            "CANCELLED_LABEL_RU", os.environ.get("CANCELLED_LABEL", "Отменено"))
+        self.cancelled_label_en = os.environ.get(
+            "CANCELLED_LABEL_EN", "Canceled")
+        # Rendered watermarks cache (kept OUT of /web_static/uploads, which is
+        # reserved for article-editor uploads).
+        self.watermarks_dir = os.environ.get(
+            "WATERMARKS_DIR",
+            os.path.join(STATIC_ROOT_DIR, "img", "watermarks"))
+
         # --- Auth ---
         self.secret_key = _get_secret_key()
         # Comma-separated usernames allowed to log in as admin

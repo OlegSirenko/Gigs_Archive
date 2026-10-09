@@ -29,6 +29,7 @@
 .badge { padding: 3px 10px; border-radius: 20px; font-size: .75rem; font-weight: 700; text-transform: uppercase; }
 .badge-ok { background: #14351f; color: #7ddea3; }
 .badge-draft { background: #3a3218; color: #e8d27d; }
+.badge-cancelled { background: #40121a; color: #ff8f9c; }
 .tag { background: #232637; color: var(--muted); border-radius: 6px; padding: 2px 7px; font-size: .75rem; margin-left: 6px; }
 
 /* Forms */

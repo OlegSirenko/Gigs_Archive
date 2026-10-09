@@ -82,6 +82,41 @@ class WebSettings:
         self.database_path = db_path
         self.database_url = f"sqlite:///{db_path}"
 
+        # --- Web-only database (posters_web.db) ---
+        # The site keeps its own small DB for the events it displays: only the
+        # APPROVED ones are copied here, with the few columns the web needs
+        # (id / caption / event_date / is_cancelled). This file is written by
+        # the WEB APP ONLY — the bot never sees it.
+        wdb = os.environ.get("WEB_POSTERS_DATABASE_PATH", "posters_web.db")
+        if not os.path.isabs(wdb):
+            wdb = os.path.join(PROJECT_ROOT, wdb)
+        self.web_database_path = wdb
+        self.web_database_url = f"sqlite:///{wdb}"
+
+        # --- Sync policy: gigs_archive.db -> posters_web.db ---
+        # posters_web.db is refreshed from the bot DB at three trigger points:
+        #   1. on web app startup (web/app.py);
+        #   2. admin panel button POST /admin/posters/sync;
+        #   3. lazily on public page requests, at most once every N minutes
+        #      (web/routes/public.py::_refresh_web_db_throttled).
+        # Set to 0 to disable trigger point 3 (startup + admin only).
+        self.sync_min_interval_minutes = int(
+            os.environ.get("WEB_SYNC_MIN_INTERVAL", "5"))
+
+        # --- "Canceled" watermark over poster images ---
+        # Word drawn diagonally in red on the poster picture of a cancelled
+        # event (see web/cancelled_images.py). Editable in the admin panel
+        # (settings table inside posters_web.db); this env value is the default.
+        self.cancelled_label_ru = os.environ.get(
+            "CANCELLED_LABEL_RU", os.environ.get("CANCELLED_LABEL", "Отменено"))
+        self.cancelled_label_en = os.environ.get(
+            "CANCELLED_LABEL_EN", "Canceled")
+        # Rendered watermarks cache (kept OUT of /web_static/uploads, which is
+        # reserved for article-editor uploads).
+        self.watermarks_dir = os.environ.get(
+            "WATERMARKS_DIR",
+            os.path.join(STATIC_ROOT_DIR, "img", "watermarks"))
+
         # --- Auth ---
         self.secret_key = _get_secret_key()
         # Comma-separated usernames allowed to log in as admin

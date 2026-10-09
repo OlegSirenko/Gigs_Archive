@@ -14,6 +14,8 @@
   <div class="stat"><span>{{ stats.articles_published }} / {{ stats.articles_total }}</span><label>статей опубликовано / всего</label></div>
 </div>
 
+{% if msg %}<p class="flash flash-ok">{{ msg }}</p>{% endif %}
+
 {% if admins_without_password %}
 <p class="flash flash-error">
   У админов нет постоянного пароля и они не смогут войти:
@@ -21,6 +23,72 @@
   Выпустите пароли на странице <a href="/admin/admins">Админы</a> или командой
   <code>python -m web.manage gen-passwords</code>.
 </p>
+{% endif %}
+
+<h2>События на сайте
+  <span class="muted" style="font-size:.9rem;font-weight:normal">
+    ({{ synced_total }} в веб-базе, из них отменено: {{ cancelled_total }})
+  </span>
+</h2>
+
+<form method="get" action="/admin" class="row" style="gap:.5rem;margin-bottom:.75rem">
+  <input type="text" name="q" placeholder="Поиск по тексту афиши…" value="{{ q }}">
+  <label style="display:flex;align-items:center;gap:.35rem">
+    <input type="checkbox" name="only_cancelled" value="1"
+           {% if only_cancelled %}checked{% endif %}> только отменённые
+  </label>
+  <button class="btn btn-small" type="submit">Найти</button>
+</form>
+
+<form method="post" action="/admin/posters/sync" style="margin-bottom:1rem">
+  <button class="btn btn-small" type="submit"
+          title="Скопировать новые одобренные события из базы бота в posters_web.db">
+    ⟳ Обновить список событий
+  </button>
+  <a class="btn btn-small" href="/admin/settings">Надпись «Отменено» →</a>
+</form>
+
+{% if events %}
+<table class="table">
+  <thead>
+    <tr><th>#</th><th>Афиша</th><th>Дата события</th><th>Статус</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for e in events %}
+    <tr>
+      <td class="muted">{{ e.id }}</td>
+      <td>
+        <a href="/posters/{{ e.id }}" target="_blank">
+          {{ (e.caption or '') | firstline | truncate(60, true) or '— без текста —' }}
+        </a>
+      </td>
+      <td class="muted">{{ e.event_date | ru_date if e.event_date else '—' }}</td>
+      <td>
+        {% if e.is_cancelled %}
+          <span class="badge badge-cancelled">отменено</span>
+        {% else %}
+          <span class="badge badge-ok">активно</span>
+        {% endif %}
+      </td>
+      <td class="actions">
+        {% if e.is_cancelled %}
+        <form method="post" action="/admin/posters/{{ e.id }}/uncancel">
+          <button class="btn btn-small" type="submit">Вернуть</button>
+        </form>
+        {% else %}
+        <form method="post" action="/admin/posters/{{ e.id }}/cancel"
+              onsubmit="return confirm('Отменить событие #{{ e.id }}? На его афише появится красный штамп.');">
+          <button class="btn btn-small btn-danger" type="submit">Отменить</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">В веб-базе событий пока нет — нажмите «⟳ Обновить список
+   событий», чтобы скопировать одобренные афиши из базы бота.</p>
 {% endif %}
 
 <h2>Статьи</h2>

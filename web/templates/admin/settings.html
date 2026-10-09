@@ -1,0 +1,48 @@
+{% extends "admin/base_admin.html" %}
+{% block title %}Настройки — админ {{ site_title }}{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h1>Настройки</h1>
+</div>
+
+{% if msg %}<p class="flash flash-ok">{{ msg }}</p>{% endif %}
+
+<h2>Надпись на отменённых афишах</h2>
+<p class="muted">
+  Это слово рисуется большим красным диагональным штаммом сверху на картинке
+  события, отмеченного как «Отменено» (Pillow, кэш в
+  <code>web_static/img/watermarks/</code>). Значения по умолчанию берутся из
+  переменных окружения <code>CANCELLED_LABEL_RU</code> /
+  <code>CANCELLED_LABEL_EN</code>; то, что сохранено здесь, их переопределяет.
+</p>
+
+<form method="post" action="/admin/settings" class="form">
+  <label>
+    Надпись по-русски
+    <input type="text" name="label_ru" value="{{ label_ru }}" maxlength="32"
+           placeholder="{{ default_ru }}">
+    <small class="muted">по умолчанию: {{ default_ru }}</small>
+  </label>
+
+  <label>
+    Надпись по-английски
+    <input type="text" name="label_en" value="{{ label_en }}" maxlength="32"
+           placeholder="{{ default_en }}">
+    <small class="muted">по умолчанию: {{ default_en }}</small>
+  </label>
+
+  <p class="muted">
+    Пустое поле = вернуть значение по умолчанию. После сохранения все уже
+    отрендеренные штампы пересоздаются с новым словом автоматически.
+  </p>
+
+  <button class="btn btn-primary" type="submit">Сохранить</button>
+</form>
+
+<p style="margin-top:1.5rem">
+  Сейчас на сайте используется: <strong>{{ label_ru }}</strong>
+  (EN: <strong>{{ label_en }}</strong>)
+</p>
+
+{% endblock %}

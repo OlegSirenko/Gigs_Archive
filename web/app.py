@@ -12,6 +12,8 @@ from web.routes import admin as admin_routes
 
 # ИСПРАВЛЕННЫЕ ИМПОРТЫ (разделены по правильным файлам)
 from web.helpers import render_body, first_line, poster_image_url
+from web.cancelled_images import ensure_uploads_dirs, init_web_settings
+from web.database import sync_web_posters
 from web.posters import telegram_post_link
 
 from web import i18n_web
@@ -30,6 +32,14 @@ def create_app() -> FastAPI:
     init_web_db()
     init_articles_db()
 
+    # Веб-база афиш (posters_web.db): таблица настроек + копия одобренных
+    # событий из базы бота. Идемпотентно; базу бота не меняем никогда.
+    try:
+        init_web_settings()
+        sync_web_posters()
+    except Exception as exc:            # сайт должен подняться даже без БД
+        print(f"[web] posters_web.db sync skipped: {exc}")
+
     # 1. Подключение статических файлов (CSS, JS, картинки)
     static_dir = os.path.join(os.path.dirname(__file__), "..", "web_static")
     os.makedirs(static_dir, exist_ok=True)
@@ -39,6 +49,7 @@ def create_app() -> FastAPI:
     # web_static/uploads -> /static/uploads (через тот же StaticFiles mount)
     from web.image_storage import ensure_uploads_dir
     ensure_uploads_dir()
+    ensure_uploads_dirs()  # кэш картинок с водяным знаком «Отменено»
     
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 

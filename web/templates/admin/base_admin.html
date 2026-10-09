@@ -20,6 +20,7 @@
       <a href="/admin" class="{{ 'active' if request.url.path in ('/admin', '/admin/') }}">Обзор</a>
       <a href="/admin/articles/new" class="{{ 'active' if request.url.path.endswith('/new') }}">Новая статья</a>
       <a href="/admin/admins" class="{{ 'active' if request.url.path.startswith('/admin/admins') }}">Админы</a>
+      <a href="/admin/settings" class="{{ 'active' if request.url.path.startswith('/admin/settings') }}">Настройки</a>
       {% if current_user %}
         <span class="who">@{{ current_user.username }}</span>
         <a href="/admin/logout">Выйти</a>

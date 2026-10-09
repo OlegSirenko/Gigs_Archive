@@ -1,5 +1,7 @@
+import os
+import time
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse  # <-- ДОБАВЬТЕ RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
@@ -8,8 +10,11 @@ from sqlalchemy.orm import joinedload, noload
 from web.articles_db import Article, get_article_session
 from web.auth import get_current_user
 from web.config import settings
-from web.database import ModerationStatus, Poster, User, get_session
-from web.helpers import render_body
+from web.database import (ModerationStatus, Poster, User, get_session,
+                          sync_web_posters)
+from web.cancelled_images import (cancelled_image_url, get_cancelled_label,
+                                  is_cancelled, render_and_cache)
+from web.helpers import attach_cancel_flags, render_body
 from web.posters import first_line, telegram_post_link
 from web.helpers import poster_image_url
 from web import i18n_web
@@ -34,6 +39,9 @@ templates.env.filters["ru_datetime"] = i18n_web.ru_datetime
 templates.env.filters["ru_date_short"] = i18n_web.ru_date_short
 templates.env.filters["kind_label"] = i18n_web.kind_label
 
+# Last successful lazy-sync timestamp (see _refresh_web_db_throttled).
+_last_web_sync_ts: float | None = None
+
 
 def _attach_posters(articles):
     """Articles live in a separate DB from posters, so the ORM relationship is
@@ -47,14 +55,51 @@ def _attach_posters(articles):
     for a in articles:
         a.poster = by_id.get(a.poster_id)
 
+def _refresh_web_db_throttled() -> None:
+    """Lazy sync of posters_web.db from the bot DB (gigs_archive.db).
+
+    Trigger points for updating posters_web.db:
+      1. App startup (web/app.py) — full sync when the site boots;
+      2. Admin panel "Синхронизировать" button (POST /admin/posters/sync);
+      3. THIS one — on public page requests, at most once every
+         WEB_SYNC_MIN_INTERVAL minutes (default 5), so freshly approved
+         events appear on the site even if nobody restarts it or clicks
+         the button. The sync is cheap (one indexed SELECT + upserts of
+         rows that actually changed) and idempotent.
+    Set WEB_SYNC_MIN_INTERVAL=0 to disable request-time syncing entirely.
+    Never touches gigs_archive.db; cancel flags in the web DB are preserved.
+    """
+    global _last_web_sync_ts
+    min_interval = max(0, int(settings.sync_min_interval_minutes)) * 60
+    if min_interval == 0:
+        return
+    now = time.monotonic()
+    if _last_web_sync_ts and (now - _last_web_sync_ts) < min_interval:
+        return
+    _last_web_sync_ts = now  # set BEFORE the work so failures don't retry per-request
+    try:
+        added = sync_web_posters()
+        if added:
+            print(f"[web] lazy sync: {added} new event(s) copied to posters_web.db")
+    except Exception as exc:
+        print(f"[web] lazy sync skipped: {exc}")
+
+
 def _ctx(request: Request, **extra):
     user = get_current_user(request)
+    try:
+        cancelled_label = get_cancelled_label()
+    except Exception:
+        cancelled_label = ""
     return {
         "site_title": settings.site_title,
         "telegram_channel": settings.telegram_channel,
         "current_user": user,
         "now": datetime.now(),
         "timedelta": timedelta,
+        # Сло для водяного знака на афишах отменённых событий (правится в
+        # админке -> «Настройки»). Пустная строка, если веб-БД ещё не создана.
+        "cancelled_label": cancelled_label,
         **extra,
     }
 
@@ -87,6 +132,9 @@ def _event_dt(p: Poster):
 # ---------------- Home (Главная страница) ----------------
 @router.get("/")
 def home(request: Request):
+    # Обновляем posters_web.db из базы бота не чаще раза в
+    # WEB_SYNC_MIN_INTERVAL минут (см. _refresh_web_db_throttled).
+    _refresh_web_db_throttled()
     now = datetime.now()
     with get_session() as s:
         approved = s.query(Poster).filter(Poster.status == ModerationStatus.APPROVED)
@@ -125,6 +173,10 @@ def home(request: Request):
         for p in upcoming:
             edt = _event_dt(p)
             p.is_soon = bool(edt and now <= edt <= now + soon_cutoff)
+
+        # Флаг «отменено» из веб-БД (posters_web.db) — для карточек и штампа
+        attach_cancel_flags(upcoming)
+        attach_cancel_flags(past_events)
 
         total_events = s.query(Poster).filter(Poster.status == ModerationStatus.APPROVED).count()
 
@@ -180,6 +232,7 @@ def posters_list(
     for p in items:
         edt = _event_dt(p)
         p.is_soon = bool(edt and now <= edt <= soon_cutoff)
+    attach_cancel_flags(items)
 
     pages = max(1, (total + per_page - 1) // per_page)
     return templates.TemplateResponse(request, "posters.html", _ctx(
@@ -207,6 +260,7 @@ def poster_detail(request: Request, poster_id: int):
         
         poster.view_count = (poster.view_count or 0) + 1
         s.commit()
+        poster.is_cancelled = is_cancelled(poster.id)
         
         # !!! ПРЯМОЙ ВЫЗОВ ФУНКЦИИ В ОБХОД ФИЛЬТРОВ JINJA2 !!!
         print("!!! [ПРЯМОЙ ВЫЗОВ] Вызываю poster_image_url напрямую из Python-кода...")
@@ -271,6 +325,7 @@ async def proxy_poster_image(poster_id: int):
         
         if not poster or not poster.photo_file_id:
             return Response(content="Not Found", status_code=404)
+        cancelled = is_cancelled(poster.id)
     
     from web.config import settings
     
@@ -285,6 +340,24 @@ async def proxy_poster_image(poster_id: int):
             return Response(content="Telegram API Error", status_code=502)
             
         file_path = file_data["result"]["file_path"]
+
+        # Отменённое событие: отдаём картинку с красным диагональным штампом
+        # (Pillow). Рендер кэшируется на диске, поэтому штамп рисуется один раз.
+        if cancelled:
+            cached = cancelled_image_url(poster)
+            if cached:
+                return RedirectResponse(cached, status_code=302)
+
+        # 2b. Already-rendered watermark sitting in the cache dir (e.g. rendered
+        # by the admin panel right after the event was marked as cancelled).
+        from web.cancelled_images import _cache_path
+        cache_file = _cache_path(poster.id)
+        if cancelled and os.path.isfile(cache_file):
+            with open(cache_file, "rb") as fh:
+                return Response(
+                    content=fh.read(), media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400"},
+                )
         
         # 2. Скачиваем саму картинку с CDN Telegram (внутри сервера)
         cdn_url = f"https://api.telegram.org/file/bot{settings.bot_token}/{file_path}"
@@ -295,6 +368,15 @@ async def proxy_poster_image(poster_id: int):
         
         # 3. Отдаем байты картинки браузеру напрямую из памяти нашего сервера
         # Браузер видит только ответ от НАШЕГО домена. Токен скрыт.
+        if cancelled:
+            stamped = render_and_cache(poster.id, img_resp.content)
+            if stamped:
+                return Response(
+                    content=stamped,
+                    media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=3600"},
+                )
+
         return Response(
             content=img_resp.content,
             media_type=img_resp.headers.get("content-type", "image/jpeg"),

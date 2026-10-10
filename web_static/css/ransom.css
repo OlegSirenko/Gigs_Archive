@@ -649,6 +649,7 @@ html { scroll-behavior: auto; }
 .badge { border-radius: 0 !important; font-family: var(--font-type); border: 1px solid currentColor; }
 .badge-ok { background: rgba(39, 174, 96, .15) !important; color: var(--green) !important; }
 .badge-draft { background: rgba(244, 208, 63, .12) !important; color: var(--gold) !important; }
+.badge-cancelled { background: rgba(220, 20, 40, .18) !important; color: #ff6b7a !important; }
 .flash-ok { background: rgba(39,174,96,.18) !important; color: var(--green) !important; border: 2px solid var(--green); }
 .flash-error { background: rgba(231,76,60,.15) !important; color: var(--red) !important; border: 2px solid var(--red); }
 .site-header nav a { font-family: var(--font-type); text-transform: uppercase; letter-spacing: .05em; font-size: .85rem; }

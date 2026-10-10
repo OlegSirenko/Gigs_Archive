@@ -28,12 +28,50 @@ def _is_block_markup(p: str) -> bool:
     return not stripped and chr(0) + "P" in p
 
 def poster_image_url(poster) -> str | None:
-    """Возвращает URL нашего прокси-эндпоинта для картинки."""
-    if not poster or not hasattr(poster, 'photo_file_id') or not poster.photo_file_id:
+    """Возвращает URL картинки афиши.
+
+    Обычные события — ссылка на наш прокси Bot API.
+    Отменённые события (is_cancelled = 1 в веб-базе posters_web.db) —
+    статический файл с красным диагональным водяным знаком «ОТМЕНЕНО»,
+    который генерируется Pillow'ом и кэшируется на диске. Если кэш ещё пуст,
+    возвращаем обычный прокси-URL: сам прокси дорисует штамп на лету.
+    """
+    if not poster:
+        return None
+    pid = getattr(poster, "id", None)
+    if pid is None:
         return None
 
-    # Просто возвращаем ссылку на наш прокси, который использует Bot API
+    try:
+        from web.cancelled_images import cancelled_image_url, is_cancelled
+        if is_cancelled(pid):
+            url = cancelled_image_url(poster)
+            if url:
+                return url
+    except Exception:
+        pass
+
+    if not getattr(poster, "photo_file_id", None):
+        return None
+
+    # Ссылка на прокси, который использует Bot API (для отменённых событий он
+    # отдаёт уже проштампованную картинку).
     return f"/api/poster-image/{poster.id}"
+
+
+def attach_cancel_flags(posters) -> list:
+    """Помечает список бот-постеров атрибутом is_cancelled (из веб-БД).
+
+    Делает один запрос вместо N: шаблоны читают p.is_cancelled напрямую.
+    """
+    try:
+        from web.cancelled_images import cancelled_ids
+        ids = cancelled_ids()
+    except Exception:
+        ids = set()
+    for p in posters:
+        p.is_cancelled = getattr(p, "id", None) in ids
+    return posters
 
 
 def slugify(text: str, max_len: int = 180) -> str:

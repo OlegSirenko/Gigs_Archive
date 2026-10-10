@@ -1,4 +1,5 @@
 import os
+
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -93,6 +94,15 @@ def create_app() -> FastAPI:
         return ("<pre>Gigs Archive web — DB: %s (%s) | Articles DB: %s (%s)</pre>"
                 % (settings.database_path, 'found' if ok else 'not created yet',
                    articles_db_path, 'found' if ok_articles else 'not created yet'))
+
+    @app.get("/yandex_c0cfda208163f11a.html", response_class=HTMLResponse)
+    async def yandex_verification():
+        return """
+        <html>
+            <head><meta name="yandex-verification" content="c0cfda208163f11a" /></head>
+            <body>Verification code: c0cfda208163f11a</body>
+        </html>
+        """
 
     # Отладочный вывод маршрутов
     print("\n=== ЗАРЕГИСТРИРОВАННЫЕ МАРШРУТЫ ===")

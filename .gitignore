@@ -1,9 +1,11 @@
-# Compiled and build artifacts
+# Python bytecode
 __pycache__/
 *.pyc
 
-# Logs and temp files
-*.log
-*.tmp
+# Database files
+*.db
 
-/web_static/uploads/*
+# Environment files
+.env
+.env.local
+.env.*.local

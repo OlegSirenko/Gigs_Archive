@@ -22,7 +22,12 @@ from web.auth import (
     require_admin,
 )
 from web.config import settings
-from web.database import ModerationStatus, Poster, get_session
+from web.cancelled_images import (LABEL_KEY_EN, LABEL_KEY_RU,
+                                  ensure_cancelled_image, get_cancelled_label,
+                                  get_setting, is_cancelled, set_setting)
+from web.database import (ModerationStatus, Poster, WebPoster, get_session,
+                          get_web_session, set_poster_cancelled,
+                          sync_web_posters)
 from web.helpers import slugify, unique_slug
 from web.image_storage import (
     UPLOADS_URL_PREFIX,
@@ -46,6 +51,11 @@ templates.env.filters["ru_date"] = i18n_web.ru_date
 templates.env.filters["ru_datetime"] = i18n_web.ru_datetime
 templates.env.filters["ru_date_short"] = i18n_web.ru_date_short
 templates.env.filters["kind_label"] = i18n_web.kind_label
+
+
+def _flash(request: Request) -> str:
+    """One-shot message passed via query string (?msg=...), shown on the page."""
+    return (request.query_params.get("msg") or "")[:200]
 
 
 def _ctx(request: Request, **extra):
@@ -172,7 +182,7 @@ def rotate_password(request: Request, username: str):
 
 @router.get("")
 @router.get("/")
-def dashboard(request: Request):
+def dashboard(request: Request, q: str = "", only_cancelled: int = 0):
     user = require_admin(request)
     # Articles live in their own DB file (articles.db); posters in the bot DB.
     with get_article_session() as as_:
@@ -188,11 +198,108 @@ def dashboard(request: Request):
             "articles_total": len(articles),
             "articles_published": sum(1 for a in articles if a.is_published),
         }
+
+    # События на сайте — из веб-БД posters_web.db (её правит только админка).
+    with get_web_session() as ws:
+        evq = ws.query(WebPoster)
+        if q.strip():
+            like = f"%{q.strip()}%"
+            evq = evq.filter(WebPoster.caption.like(like))
+        if only_cancelled:
+            evq = evq.filter(WebPoster.is_cancelled.is_(True))
+        events = evq.order_by(WebPoster.event_date.desc().nullslast(),
+                              WebPoster.id.desc()).limit(300).all()
+        cancelled_total = (ws.query(WebPoster)
+                           .filter(WebPoster.is_cancelled.is_(True)).count())
+        synced_total = ws.query(WebPoster).count()
+
     no_password = [a for a in sorted(settings.all_admin_usernames())
                    if not settings.has_admin_password(a)]
     return templates.TemplateResponse(request, "admin/dashboard.html",
                                       _ctx(request, articles=articles, stats=stats,
-                                           admins_without_password=no_password))
+                                           admins_without_password=no_password,
+                                           events=events, q=q,
+                                           only_cancelled=only_cancelled,
+                                           cancelled_total=cancelled_total,
+                                           synced_total=synced_total,
+                                           msg=_flash(request)))
+
+
+# ---------------- Events: cancel / uncancel / sync (web DB only) ----------------
+
+@router.post("/posters/{poster_id}/cancel")
+def cancel_event(request: Request, poster_id: int, back: str = "/admin"):
+    """Mark an event as cancelled -> red diagonal watermark on its picture."""
+    require_admin(request)
+    set_poster_cancelled(poster_id, True)
+    # Отрисовать штамп сразу, чтобы страница открылась без «на лету» задержки.
+    try:
+        row = None
+        with get_web_session() as ws:
+            row = ws.get(WebPoster, poster_id)
+        if row is not None:
+            ensure_cancelled_image(row)
+    except Exception:
+        pass
+    safe = back if back.startswith("/admin") else "/admin"
+    return RedirectResponse(f"{safe}?msg="
+                            f"Событие%20%23{poster_id}%20отменено%20%E2%9C%94",
+                            status_code=303)
+
+
+@router.post("/posters/{poster_id}/uncancel")
+def uncancel_event(request: Request, poster_id: int, back: str = "/admin"):
+    """Remove the cancel flag and the cached watermarked image."""
+    require_admin(request)
+    set_poster_cancelled(poster_id, False)
+    safe = back if back.startswith("/admin") else "/admin"
+    return RedirectResponse(f"{safe}?msg="
+                            f"Событие%20%23{poster_id}%20восстановлено%20%E2%9C%94",
+                            status_code=303)
+
+
+@router.post("/posters/sync")
+def sync_events(request: Request):
+    """Copy newly APPROVED events from the bot DB into posters_web.db."""
+    require_admin(request)
+    added = sync_web_posters()
+    return RedirectResponse(f"/admin?msg=%D0%9E%D0%B1%D0%BD%D0%BE%D0%B2%D0%BB%D0%B5%D0%BD%D0%BE"
+                            f"%20%D1%81%D0%BE%D0%B1%D1%8B%D1%82%D0%B8%D0%B9%3A%20{added}",
+                            status_code=303)
+
+
+# ---------------- Settings: the "Canceled" label ----------------
+
+@router.get("/settings")
+def settings_page(request: Request):
+    require_admin(request)
+    return templates.TemplateResponse(request, "admin/settings.html", _ctx(
+        request,
+        label_ru=get_cancelled_label("ru"),
+        label_en=get_cancelled_label("en"),
+        default_ru=settings.cancelled_label_ru,
+        default_en=settings.cancelled_label_en,
+        msg=_flash(request),
+    ))
+
+
+@router.post("/settings")
+def settings_save(request: Request, label_ru: str = Form(""),
+                  label_en: str = Form("")):
+    require_admin(request)
+    ru = (label_ru or "").strip()[:32]
+    en = (label_en or "").strip()[:32]
+    # Пустое поле = вернуть значение по умолчанию из окружения.
+    set_setting(LABEL_KEY_RU, ru or settings.cancelled_label_ru)
+    set_setting(LABEL_KEY_EN, en or settings.cancelled_label_en)
+    # Слово изменилось — старые рендеры с прежней надписью больше не нужны.
+    from web.cancelled_images import _cache_path, delete_cached_render
+    with get_web_session() as ws:
+        for (pid,) in ws.query(WebPoster.id).filter(
+                WebPoster.is_cancelled.is_(True)).all():
+            delete_cached_render(pid)
+    return RedirectResponse("/admin/settings?msg=%D0%A1%D0%BE%D1%85%D1%80%D0%B0%D0%BD%D0%B5%D0%BD%D0%BE"
+                            "%20%E2%9C%94", status_code=303)
 
 
 # ---------------- Article CRUD ----------------

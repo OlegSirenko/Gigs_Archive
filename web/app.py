@@ -10,6 +10,7 @@ from web.articles_db import articles_db_path, init_articles_db
 from web.database import init_web_db
 from web.routes import public as public_routes
 from web.routes import admin as admin_routes
+from web.sitemap import register_seo_routes
 
 # ИСПРАВЛЕННЫЕ ИМПОРТЫ (разделены по правильным файлам)
 from web.helpers import render_body, first_line, poster_image_url
@@ -76,6 +77,9 @@ def create_app() -> FastAPI:
     # 3. Подключение роутеров (самое важное!)
     app.include_router(public_routes.router)
     app.include_router(admin_routes.router)
+
+    # 3b. sitemap.xml и robots.txt для Яндекса (генерируются на лету из БД)
+    register_seo_routes(app)
 
     # 4. Обработчик 404
     @app.exception_handler(404)

@@ -136,6 +136,11 @@ class WebSettings:
 
         # --- Site meta ---
         self.site_title = os.environ.get("SITE_TITLE", "Gigs Archive")
+        # Absolute public origin of the site, used to build absolute URLs in
+        # sitemap.xml (Yandex requires full http(s)://host/... addresses).
+        # Example: SITE_URL=https://gigs-archive.ru  (trailing slash optional)
+        # If not set, the Host header of the incoming request is used.
+        self.site_url = os.environ.get("SITE_URL", "").rstrip("/")
         # Public Telegram channel username (links are built as https://t.me/<name>)
         self.telegram_channel = os.environ.get("TELEGRAM_CHANNEL", "GigsArchive")
         self.bot_token = os.environ.get("BOT_TOKEN", "NONE")

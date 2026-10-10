@@ -99,8 +99,10 @@ def create_app() -> FastAPI:
     async def yandex_verification():
         return """
         <html>
-            <head><meta name="yandex-verification" content="c0cfda208163f11a" /></head>
-            <body>Verification code: c0cfda208163f11a</body>
+            <head>
+                <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+            </head>
+            <body>Verification: c0cfda208163f11a</body>
         </html>
         """
 

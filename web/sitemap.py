@@ -130,8 +130,6 @@ def build_robots(base: str, fallback_host: str = "") -> str:
         "Disallow: /api/\n"
         "Disallow: /healthz\n"
         "\n"
-        "# Директива Host — специфична для Яндекса: основное зеркало сайта.\n"
-        f"Host: {host}\n"
         f"Sitemap: {base}/sitemap.xml\n"
     )
 

@@ -3,7 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}{{ site_title }}{% endblock %}</title>
+  <title>{% block title %}{{ site_name }}{% endblock %}</title>
+  <!-- SEO / social meta tags (Google & Yandex snippets) -->
+  {% block meta %}
+  <meta name="description" content="{% block description %}{{ site_description }}{% endblock %}">
+  <meta name="robots" content="index, follow">
+  <!-- Favicon / Telegram link-preview icon -->
+  <link rel="icon" type="image/jpeg" href="/static/img/logo.jpg">
+  {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+  <!-- Open Graph: read by the Telegram link-preview bot -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ site_name }}">
+  <meta property="og:title" content="{% block og_title %}{{ site_name }}{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}{{ site_description }}{% endblock %}">
+  {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
+  {% if site_url %}<meta property="og:image" content="{{ site_url }}/static/img/logo.jpg">{% endif %}
+  {% endblock %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Courier+Prime&family=Oswald:wght@700&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Rubik:wght@900&family=Rubik+Mono+One&family=Special+Elite&display=swap">

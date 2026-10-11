@@ -63,6 +63,10 @@ def _ctx(request: Request, **extra):
     user = get_current_user(request)
     return {
         "site_title": settings.site_title,
+        "site_name": settings.site_name,
+        "site_description": settings.site_description,
+        "site_url": settings.site_url,
+        "canonical_url": (settings.site_url or str(request.base_url).rstrip("/")) + request.url.path,
         "telegram_channel": settings.telegram_channel,
         "current_user": user,
         "kinds": KINDS,

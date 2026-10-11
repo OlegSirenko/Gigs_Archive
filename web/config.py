@@ -135,7 +135,17 @@ class WebSettings:
         self.session_max_age = 60 * 60 * 24 * 7  # 1 week
 
         # --- Site meta ---
-        self.site_title = os.environ.get("SITE_TITLE", "Gigs Archive")
+        self.site_title = os.environ.get("SITE_TITLE", "GigsArchive")
+        # Short brand name used in <title> and og:site_name (keeps search
+        # engines from showing long marketing titles like "Gigs Archive — ...").
+        self.site_name = os.environ.get("SITE_NAME", "GigsArchive")
+        # Meta description shown in search results (Google/Yandex snippets).
+        self.site_description = os.environ.get(
+            "SITE_DESCRIPTION",
+            "GigsArchive — все концерты на одной стене: афиши, которые "
+            "публикует сообщество через Telegram-бота, собраны, проверены "
+            "и сохранены.",
+        )
         # Absolute public origin of the site, used to build absolute URLs in
         # sitemap.xml (Yandex requires full http(s)://host/... addresses).
         # Example: SITE_URL=https://gigs-archive.ru  (trailing slash optional)

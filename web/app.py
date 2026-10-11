@@ -86,6 +86,10 @@ def create_app() -> FastAPI:
     async def not_found(request: Request, exc):
         return templates.TemplateResponse(request, "404.html", {
             "site_title": settings.site_title,
+            "site_name": settings.site_name,
+            "site_description": settings.site_description,
+            "site_url": settings.site_url,
+            "canonical_url": None,
             "telegram_channel": settings.telegram_channel,
             "current_user": None,
         }, status_code=404)

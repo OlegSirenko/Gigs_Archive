@@ -8,16 +8,16 @@
   {% block meta %}
   <meta name="description" content="{% block description %}{{ site_description }}{% endblock %}">
   <meta name="robots" content="index, follow">
+  <!-- Favicon / Telegram link-preview icon -->
+  <link rel="icon" type="image/jpeg" href="/static/img/logo.jpg">
   {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+  <!-- Open Graph: read by the Telegram link-preview bot -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="{{ site_name }}">
   <meta property="og:title" content="{% block og_title %}{{ site_name }}{% endblock %}">
   <meta property="og:description" content="{% block og_description %}{{ site_description }}{% endblock %}">
   {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
   {% if site_url %}<meta property="og:image" content="{{ site_url }}/static/img/logo.jpg">{% endif %}
-  <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="{{ site_name }}">
-  <meta name="twitter:description" content="{{ site_description }}">
   {% endblock %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

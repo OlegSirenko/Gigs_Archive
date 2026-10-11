@@ -93,6 +93,11 @@ def _ctx(request: Request, **extra):
         cancelled_label = ""
     return {
         "site_title": settings.site_title,
+        "site_name": settings.site_name,
+        "site_description": settings.site_description,
+        "site_url": settings.site_url,
+        # Полный абсолютный URL текущей страницы для canonical/og:url
+        "canonical_url": (settings.site_url or str(request.base_url).rstrip("/")) + request.url.path,
         "telegram_channel": settings.telegram_channel,
         "current_user": user,
         "now": datetime.now(),

@@ -1,8 +1,8 @@
 # config.py
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, NoDecode
 from pydantic import field_validator
 from functools import lru_cache
-from typing import List
+from typing import Annotated, List
 
 class Settings(BaseSettings):
     """Bot configuration from .env file"""
@@ -21,25 +21,37 @@ class Settings(BaseSettings):
     test_channel_id: int | None = None
     
     # Admin IDs (comma-separated string → List[int])
-    admin_ids: List[int]
+    # NoDecode: parse the raw env string with the validator below instead of
+    # letting pydantic-settings JSON-decode complex fields like "123,456".
+    admin_ids: Annotated[List[int], NoDecode]
 
     # Privacy policy version (update to force re-acceptance)
     privacy_policy_version: str = "1.0"
 
     # Bot username (set after bot starts)
     bot_username: str | None = None
-    
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
-    
+        # The shared .env also contains variables used only by the web app
+        # (WEB_SYNC_MIN_INTERVAL, SITE_NAME, SITE_URL, ...). Ignore unknown
+        # keys instead of crashing with extra_forbidden.
+        extra = "ignore"
+
     @field_validator("admin_ids", mode="before")
     @classmethod
     def parse_admin_ids(cls, value):
-        """Convert comma-separated string to list of integers"""
+        """Convert comma-separated string to list of integers.
+
+        Accepts both plain ("123,456") and JSON-style ("[123, 456]") values.
+        Note: pydantic-settings pre-decodes complex fields (List[...]) as
+        JSON, so we also declare a NoDecode annotation below.
+        """
         if isinstance(value, str):
-            # Split by comma, strip whitespace, convert to int
-            return [int(x.strip()) for x in value.split(",")]
+            return [int(x) for x in value.strip().strip("[]").split(",") if x.strip()]
+        if isinstance(value, (list, tuple)):
+            return [int(x) for x in value]
         return value
 
 @lru_cache()

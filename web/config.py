@@ -14,6 +14,7 @@ import secrets
 
 WEB_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(WEB_DIR)
+STATIC_ROOT_DIR = os.path.join(PROJECT_ROOT, "web_static")
 
 
 def _parse_env_file(path: str) -> dict:
@@ -81,6 +82,41 @@ class WebSettings:
         self.database_path = db_path
         self.database_url = f"sqlite:///{db_path}"
 
+        # --- Web-only database (posters_web.db) ---
+        # The site keeps its own small DB for the events it displays: only the
+        # APPROVED ones are copied here, with the few columns the web needs
+        # (id / caption / event_date / is_cancelled). This file is written by
+        # the WEB APP ONLY — the bot never sees it.
+        wdb = os.environ.get("WEB_POSTERS_DATABASE_PATH", "posters_web.db")
+        if not os.path.isabs(wdb):
+            wdb = os.path.join(PROJECT_ROOT, wdb)
+        self.web_database_path = wdb
+        self.web_database_url = f"sqlite:///{wdb}"
+
+        # --- Sync policy: gigs_archive.db -> posters_web.db ---
+        # posters_web.db is refreshed from the bot DB at three trigger points:
+        #   1. on web app startup (web/app.py);
+        #   2. admin panel button POST /admin/posters/sync;
+        #   3. lazily on public page requests, at most once every N minutes
+        #      (web/routes/public.py::_refresh_web_db_throttled).
+        # Set to 0 to disable trigger point 3 (startup + admin only).
+        self.sync_min_interval_minutes = int(
+            os.environ.get("WEB_SYNC_MIN_INTERVAL", "5"))
+
+        # --- "Canceled" watermark over poster images ---
+        # Word drawn diagonally in red on the poster picture of a cancelled
+        # event (see web/cancelled_images.py). Editable in the admin panel
+        # (settings table inside posters_web.db); this env value is the default.
+        self.cancelled_label_ru = os.environ.get(
+            "CANCELLED_LABEL_RU", os.environ.get("CANCELLED_LABEL", "Отменено"))
+        self.cancelled_label_en = os.environ.get(
+            "CANCELLED_LABEL_EN", "Canceled")
+        # Rendered watermarks cache (kept OUT of /web_static/uploads, which is
+        # reserved for article-editor uploads).
+        self.watermarks_dir = os.environ.get(
+            "WATERMARKS_DIR",
+            os.path.join(STATIC_ROOT_DIR, "img", "watermarks"))
+
         # --- Auth ---
         self.secret_key = _get_secret_key()
         # Comma-separated usernames allowed to log in as admin
@@ -91,14 +127,46 @@ class WebSettings:
             if u.strip()
         }
         self.admins_json_path = os.path.join(WEB_DIR, "admins.json")
+        # Permanent admin passwords (PBKDF2 hashes) — web/admin_passwords.json
+        self.admin_passwords_path = os.path.join(WEB_DIR, "admin_passwords.json")
 
         # --- Session cookie ---
         self.session_cookie_name = "gigs_session"
         self.session_max_age = 60 * 60 * 24 * 7  # 1 week
 
         # --- Site meta ---
-        self.site_title = os.environ.get("SITE_TITLE", "Gigs Archive")
-        self.telegram_channel = os.environ.get("TELEGRAM_CHANNEL", "Gigs_archive")
+        self.site_title = os.environ.get("SITE_TITLE", "GigsArchive")
+        # Short brand name used in <title> and og:site_name (keeps search
+        # engines from showing long marketing titles like "Gigs Archive — ...").
+        self.site_name = os.environ.get("SITE_NAME", "GigsArchive")
+        # Meta description shown in search results (Google/Yandex snippets).
+        self.site_description = os.environ.get(
+            "SITE_DESCRIPTION",
+            "GigsArchive — все концерты на одной стене: афиши, которые "
+            "публикует сообщество через Telegram-бота, собраны, проверены "
+            "и сохранены.",
+        )
+        # Absolute public origin of the site, used to build absolute URLs in
+        # sitemap.xml (Yandex requires full http(s)://host/... addresses).
+        # Example: SITE_URL=https://gigs-archive.ru  (trailing slash optional)
+        # If not set, the Host header of the incoming request is used.
+        self.site_url = os.environ.get("SITE_URL", "").rstrip("/")
+        # Public Telegram channel username (links are built as https://t.me/<name>)
+        self.telegram_channel = os.environ.get("TELEGRAM_CHANNEL", "GigsArchive")
+        self.bot_token = os.environ.get("BOT_TOKEN", "NONE")
+        # --- Logo ---
+        # The site logo lives in web_static/img/. If it is missing, the
+        # `python -m web.logo` command downloads the channel's photo from
+        # Telegram (no login required) into that folder.
+        self.logo_url = None
+        for _ext in ("jpg", "png", "webp"):
+            _p = os.path.join(STATIC_ROOT_DIR, "img", f"logo.{_ext}")
+            if os.path.isfile(_p):
+                self.logo_path = _p
+                self.logo_url = f"/img/logo.{_ext}"
+                break
+        else:
+            self.logo_path = os.path.join(STATIC_ROOT_DIR, "img", "logo.jpg")
 
         # --- Telegram poster images (re-posted from the bot/channel) ---
         # Public Bot API endpoint that serves channel photos, e.g.
@@ -142,6 +210,28 @@ class WebSettings:
             current.append(username)
         with open(self.admins_json_path, "w", encoding="utf-8") as f:
             json.dump({"admins": current}, f, indent=2, ensure_ascii=False)
+
+    # ---------- permanent admin passwords ----------
+
+    def admin_password_hashes(self) -> dict:
+        """username -> password-hash record (web/admin_passwords.json)."""
+        try:
+            from web.passwords import AdminPasswordStore
+            return AdminPasswordStore(self.admin_passwords_path)._read()
+        except Exception:
+            return {}
+
+    def has_admin_password(self, username: str | None) -> bool:
+        if not username:
+            return False
+        return username.lstrip("@").lower() in self.admin_password_hashes()
+
+    def verify_admin_password(self, username: str | None, password: str | None) -> bool:
+        """True if `username` is an admin AND the password matches its hash."""
+        if not self.is_admin_username(username):
+            return False
+        from web.passwords import password_store
+        return password_store.verify(username, password)
 
     @property
     def poster_image_base(self) -> str:

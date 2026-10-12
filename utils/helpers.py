@@ -1,5 +1,6 @@
 # utils/helpers.py
 """Helper functions for formatting and text processing"""
+import logging
 import re
 import json
 import html
@@ -7,6 +8,93 @@ from aiogram.types import Message, MessageOriginUser, MessageOriginChat, Message
 from datetime import datetime, date
 from typing import Optional, Dict
 from utils.i18n import i18n, t
+
+logger = logging.getLogger(__name__)
+
+# Диапазоны кодовых точек эмодзи и декоративных пиктограмм
+# (синхронизировано с web/helpers.py — тот же паттерн используется на сайте)
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F1E6-\U0001F1FF"   # флаги-символы
+    "\U0001F300-\U0001FAFF"   # основной блок эмодзи (включая 🎸, 🔥 и т.п.)
+    "\U00002600-\U000027BF"   # misc symbols и дингбаты (☀–➿, ✔, ✨)
+    "\U0001F000-\U0001F0FF"   # маджонг/домино/карты
+    "\U00002B00-\U00002BFF"   # стрелки и прочие символы (⬆–⭐)
+    "\U0000FE00-\U0000FE0F"   # variation selectors
+    "\U0000200D"              # zero-width joiner
+    "\U00002049\U0000203C"    # ⁉ ‼
+    "\U00002122\U00002139"    # ™ ℹ
+    "\U00002194-\U000021AA"   # ↔ … ↪ стрелки
+    "\U0000231A-\U0000231B"   # ⌚ ⌛
+    "\U00002328"              # ⌨
+    "\U000023CF-\U000023FA"   # ⏏ – ⏺
+    "\U000024C2"              # Ⓜ
+    "\U000025AA-\U000025FE"   # геометрические фигуры ▪ – ◾
+    "\U00002934-\U00002935"   # ⤴ ⤵
+    "\U00003030\U0000303D"    # 〰 〽
+    "\U00003297\U00003299"    # ㊗ ㊙
+    "]+",
+    flags=re.UNICODE,
+)
+
+# Остатки telegram-разметки: <a href="...">...</a>, голые URL, markdown-ссылки
+_TG_LINK_TAG_RE = re.compile(r'<a\b[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
+# <tg-emoji emoji-id="...">😀</tg-emoji> — keep the inner emoji, drop the wrapper
+_TG_EMOJI_TAG_RE = re.compile(r'<tg-emoji\b[^>]*>(.*?)</tg-emoji>', re.IGNORECASE | re.DOTALL)
+_TG_HTML_TAG_RE = re.compile(
+    r'</?\s*(?:a|u|s|strong|ins|del|b|i|em|span|pre|code|blockquote|tg-emoji|tg-spoiler|tg-time)\b[^>]*>',
+    re.IGNORECASE,
+)
+_MD_LINK_RE = re.compile(r'\[([^\]]*)\]\((?:https?://)?[^\s)]+\)')
+_BARE_URL_RE = re.compile(
+    r'(?:https?://|www\.)[^\s<>"]+|t\.me/[^\s<>"]+|telegram\.me/[^\s<>"]+',
+    re.IGNORECASE,
+)
+_MD_MARKERS_RE = re.compile(r'\*\*|__|~~|\|\||`')
+
+
+def strip_emoji(text: str | None) -> str:
+    """Удаляет все эмодзи и декоративные пиктограммы из текста."""
+    if not text:
+        return ""
+    cleaned = _EMOJI_RE.sub("", text)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    return cleaned.strip()
+
+
+def strip_telegram_markup(text: str | None) -> str:
+    """Полностью убирает разметку Telegram, оставляя только чистый текст.
+
+    Ссылки <a href="...">текст</a> и [текст](url) превращаются просто в «текст»,
+    голые URL вырезаются, теги <b>/<i> и символы **/__ удаляются.
+    Синхронизировано с web/helpers.py — так бот показывает заголовки событий
+    так же, как сайт.
+    """
+    if not text:
+        return ""
+    text = _TG_EMOJI_TAG_RE.sub(lambda m: m.group(1), text)
+    text = _TG_LINK_TAG_RE.sub(lambda m: m.group(1), text)
+    text = _MD_LINK_RE.sub(lambda m: m.group(1), text)
+    text = _TG_HTML_TAG_RE.sub("", text)
+    text = _BARE_URL_RE.sub("", text)
+    text = re.sub(r'(?:\*\*|__)((?!\s).+?(?<!\s))(?:\*\*|__)', r'\1', text)
+    text = _MD_MARKERS_RE.sub("", text)
+    return text
+
+
+def first_line(caption: str | None, fallback: str = "Event") -> str:
+    """Первая непустая строка описания — как карточки на сайте.
+
+    Без эмодзи и без какой-либо разметки: ссылки не допускаются,
+    остаётся только чистый текст.
+    """
+    if not caption:
+        return fallback
+    for line in caption.splitlines():
+        line = strip_telegram_markup(strip_emoji(line)).strip()
+        if line:
+            return line[:120]
+    return fallback
 
 
 def has_valid_link(text: str) -> bool:
@@ -149,7 +237,11 @@ def format_moderation_caption(data: Dict, poster_id: int, language: str = "ru") 
         f"{t('moderation.preview.anonymous', language, anonymous=t('common.yes' if is_anon else 'common.no', language))}\n"
         f"{t('moderation.preview.event_date', language, date=date_formatted)}\n\n"
         f"{t('moderation.preview.original_caption', language)}\n"
-        f"{data.get('caption', t('moderation.preview.no_description', language))}"
+        # Moderation chat shows the submission as a *photo caption* (1024-char
+        # hard limit). The user's caption was validated against 874 chars, but
+        # this header adds ~150 more — trim defensively so the API never
+        # rejects the moderation post with an opaque "TOO_LONG".
+        f"{_trim_caption(data.get('caption') or t('moderation.preview.no_description', language))}"
     )
 
 
@@ -237,26 +329,312 @@ def format_public_caption(data: dict, user_info: dict | None = None, language: s
     # Combine all parts
     result = f"{author_line}{date_line}\n{caption}"
 
-    return result.strip()
+    # Final safety net: Telegram rejects photo captions longer than 1024 chars
+    # with an opaque "TOO_LONG" API error. The user caption was validated
+    # against a smaller effective limit, but attribution/source links appended
+    # here could still push it over — trim defensively instead of failing.
+    return _trim_caption(result.strip())
 
 
-def validate_caption(caption: str) -> tuple[bool, str]:
+# Telegram photo caption hard limit (in characters). Captions longer than this
+# are rejected by the Bot API with error "TOO_LONG".
+TG_CAPTION_LIMIT = 1024
+
+# Hard limit for a plain text message sent by a bot (Telegram Bot API):
+# 4,096 UTF-8 characters. Longer texts must be split into several messages.
+TG_TEXT_LIMIT = 4096
+
+# Safety margin so attribution/links appended after validation still fit.
+TG_CAPTION_SAFETY_MARGIN = 150
+
+# Effective limit used when validating user captions: the real API limit minus
+# the safety margin (author line, date line, source link etc. are added later).
+TG_CAPTION_EFFECTIVE_LIMIT = TG_CAPTION_LIMIT - TG_CAPTION_SAFETY_MARGIN
+
+
+def split_message(text: str, limit: int = TG_TEXT_LIMIT) -> list[str]:
+    """Split a long text into chunks that each fit within ``limit`` characters.
+
+    Tries to keep HTML formatting valid across chunk boundaries: any tags that
+    are opened inside a chunk but not closed there are closed at the end of the
+    chunk and re-opened at the start of the next one. Chunks are broken at
+    paragraph or word boundaries whenever possible.
+
+    ``<tg-emoji emoji-id="...">😀</tg-emoji>`` wrappers (produced when
+    re-parsing forwarded messages with custom emoji via HtmlDecoration) are
+    stripped before splitting: Telegram does not allow them in bot messages
+    anyway, and their ~30-char markup would otherwise eat into the 4096-char
+    budget and could be cut in half at a chunk boundary, making the whole
+    message unsendable ("can't parse entities"). The emoji characters
+    themselves are kept and count toward the visible length.
     """
-    Validate poster caption - just check for at least one link.
-    Returns: (is_valid, error_message)
+    if not text:
+        return []
+    # Drop <tg-emoji ...> wrappers everywhere (see docstring), keep inner emoji.
+    text = _TG_EMOJI_TAG_RE.sub(r"\1", text)
+    if len(text) <= limit:
+        return [text]
+
+    tag_re = re.compile(r"<(/?)(b|i|u|s|a|code|pre|blockquote)(\s[^>]*)?>", re.IGNORECASE)
+
+    def _visible_len(s: str) -> int:
+        return len(tag_re.sub("", s))
+
+    def _open_tags(s: str) -> list[str]:
+        """Return stack of currently-open simple tags after scanning ``s``."""
+        stack: list[str] = []
+        for m in tag_re.finditer(s):
+            closing, name = m.group(1) == "/", m.group(2).lower()
+            if closing:
+                # pop matching tag (tolerate stray closers)
+                for i in range(len(stack) - 1, -1, -1):
+                    if stack[i].startswith(f"</{name}") is False and stack[i][1:].split(" ")[0].rstrip(">") == name:
+                        del stack[i]
+                        break
+            else:
+                stack.append(m.group(0))
+        return stack
+
+    chunks: list[str] = []
+    remaining = text
+    while remaining:
+        if _visible_len(remaining) <= limit:
+            piece, remaining = remaining, ""
+        else:
+            # Walk char-by-char until visible length hits the limit.
+            cut = 0
+            visible = 0
+            i = 0
+            n = len(remaining)
+            while i < n:
+                m = tag_re.match(remaining, i)
+                if m:
+                    cut = m.end()
+                    i = m.end()
+                    continue
+                visible += 1
+                if visible > limit - 10:  # leave room to close open tags
+                    break
+                i += 1
+            cut = i if i else cut
+
+            # Prefer a paragraph / word boundary near the cut.
+            head = remaining[:cut]
+            for sep in ("\n\n", "\n", " "):
+                boundary = head.rfind(sep)
+                if boundary > cut * 0.5:
+                    cut = boundary + (len(sep) if sep != " " else 0)
+                    break
+
+            piece, remaining = remaining[:cut], remaining[cut:]
+
+            # Keep HTML balanced across the boundary.
+            opens = _open_tags(piece)
+            closes = "".join(f"</{m.group(2).lower()}>" for m in
+                             (re.finditer(r"<(b|i|u|s|a|code|pre|blockquote)(\s[^>]*)?>", p, re.IGNORECASE)
+                              for p in opens))
+            if closes:
+                piece += closes
+                remaining = closes.replace("</", "<") + remaining
+
+        chunks.append(piece.strip())
+
+    return [c for c in chunks if c]
+
+
+def plain_text_length(html_text: str) -> int:
+    """Return the length of the text as Telegram will see it after parsing HTML.
+
+    Telegram counts <b>/<i>/<a href="...">visible text</a> tags by their inner
+    text only (the markup itself is not counted), so we strip tags and decode
+    entities before measuring. This lets us warn users *before* hitting the
+    "message caption TOO_LONG" API error.
     """
-    if not caption or len(caption.strip()) == 0:
-        return False, "⚠️ Please add at least one link to the event."
-    
-    if not has_valid_link(caption):
+    if not html_text:
+        return 0
+    without_emoji = _TG_EMOJI_TAG_RE.sub(r"\1", html_text)
+    without_links = _TG_LINK_TAG_RE.sub(r"\1", without_emoji)
+    without_tags = _TG_HTML_TAG_RE.sub("", without_links)
+    return len(html.unescape(without_tags))
+
+
+def validate_caption(caption: str, language: str = "ru") -> tuple[bool, str]:
+    """
+    Validate poster caption:
+      1. must not be empty;
+      2. must not exceed Telegram's photo-caption length limit (1024 chars);
+      3. must contain at least one valid link.
+
+    Returns: (is_valid, error_message) - error_message is an HTML-formatted,
+    localized explanation that tells the user exactly what is wrong and how to
+    fix it.
+    """
+    stripped = (caption or "").strip()
+
+    # ---- Empty caption ---------------------------------------------------
+    if not stripped:
         return False, (
-            "⚠️ Please add at least one link to the event.\n\n"
-            "<i>Examples:</i>\n"
-            "• example.com\n"
-            "• https://tickets.com\n"
-            "• t.me/myevent"
+            f"{t('poster_flow.validation_error.empty', language)}\n\n"
+            f"{t('poster_flow.validation_error.examples_title', language)}\n"
+            f"{t('poster_flow.validation_error.examples', language)}\n\n"
+            f"{t('poster_flow.validation_error.retry_hint', language)}"
         )
+
+    # ---- Too long ("too many chars") -------------------------------------
+    # Validate against the *effective* limit (1024 minus a safety margin),
+    # because author line / date / source link are appended later in the flow
+    # and would otherwise push the final caption over the API limit.
+    actual_len = plain_text_length(stripped)
+    if actual_len > TG_CAPTION_EFFECTIVE_LIMIT:
+        return False, (
+            t(
+                "poster_flow.validation_error.too_long",
+                language,
+                current=actual_len,
+                limit=TG_CAPTION_EFFECTIVE_LIMIT,
+                excess=actual_len - TG_CAPTION_EFFECTIVE_LIMIT,
+            )
+            + "\n\n"
+            + t("poster_flow.validation_error.too_long_hint", language)
+            + "\n\n"
+            + t("poster_flow.validation_error.retry_hint", language)
+        )
+
+    # ---- Missing link ----------------------------------------------------
+    if not has_valid_link(stripped):
+        return False, (
+            f"{t('poster_flow.validation_error.no_link', language)}\n\n"
+            f"{t('poster_flow.validation_error.examples_title', language)}\n"
+            f"{t('poster_flow.validation_error.examples', language)}\n\n"
+            f"{t('poster_flow.validation_error.retry_hint', language)}"
+        )
+
     return True, ""
+
+
+def describe_telegram_error(error: Exception, language: str = "ru") -> str:
+    """Translate a raw aiogram/Telegram API exception into a friendly,
+    human-readable explanation the user can act on.
+
+    Falls back to a generic message with the original error text so nothing
+    is ever silently swallowed.
+    """
+    status_code = getattr(error, "status_code", None) or getattr(error, "code", None)
+    raw = str(error)
+    lowered = raw.lower()
+
+    # Message/caption exceeds Telegram limits (HTTP 400, "TOO_LONG")
+    if "too_long" in lowered or "too long" in lowered:
+        return t("common.errors.too_long", language)
+
+    # Bad entity offsets / unbalanced HTML tags (HTTP 400, "can't parse entities")
+    if ("can't parse entities" in lowered
+            or "unsupported start offset" in lowered
+            or "invalid entity" in lowered):
+        return t("common.errors.bad_html", language)
+
+    # File problems
+    if "file_reference_expired" in lowered or "file id expired" in lowered:
+        return t("common.errors.file_expired", language)
+    if "file_too_big" in lowered:
+        return t("common.errors.file_too_big", language)
+
+    # Permissions
+    if "chat not found" in lowered:
+        return t("common.errors.chat_not_found", language)
+    if "bot was blocked" in lowered or "user is deactivated" in lowered:
+        return t("common.errors.bot_blocked", language)
+
+    generic = t("common.error", language)
+    if status_code:
+        return f"{generic}\n\n<code>HTTP {status_code}: {html.escape(raw[:200])}</code>"
+    return f"{generic}\n\n<code>{html.escape(raw[:200])}</code>"
+
+
+def _trim_caption(caption: str, limit: int = TG_CAPTION_LIMIT) -> str:
+    """Trim an HTML caption so its *visible* length fits Telegram's 1024-char
+    photo-caption limit. Cuts at paragraph/word boundaries and re-balances any
+    HTML tag left open by the cut, so the result is always valid HTML.
+
+    ``<tg-emoji ...>`` wrappers are stripped first (they are not allowed in
+    bot-sent messages and their markup must not count toward the visible
+    length or be cut mid-tag)."""
+    if not caption:
+        return caption
+    caption = _TG_EMOJI_TAG_RE.sub(r"\1", caption)
+    if plain_text_length(caption) <= limit:
+        return caption
+
+    tag_re = re.compile(r"<(/?)(b|i|u|s|a|code|pre|blockquote)(\s[^>]*)?>", re.IGNORECASE)
+    cut = 0
+    visible = 0
+    i = 0
+    n = len(caption)
+    while i < n:
+        m = tag_re.match(caption, i)
+        if m:
+            i = m.end()
+            continue
+        visible += 1
+        if visible > limit - 30:  # room for ellipsis + closing tags
+            break
+        i += 1
+    trimmed = caption[:i]
+
+    # Prefer a cleaner boundary near the end.
+    for sep in ("\n\n", "\n", " "):
+        b = trimmed.rfind(sep)
+        if b > len(trimmed) * 0.7:
+            trimmed = trimmed[:b]
+            break
+
+    # Close any tags left open by the cut (simple LIFO over known tags).
+    opens: list[str] = []
+    for m in tag_re.finditer(trimmed):
+        if m.group(1) == "/":
+            for j in range(len(opens) - 1, -1, -1):
+                if tag_re.fullmatch(opens[j]).group(2).lower() == m.group(2).lower():
+                    del opens[j]
+                    break
+        else:
+            opens.append(m.group(0))
+    closers = "".join(f"</{tag_re.fullmatch(p).group(2).lower()}>" for p in reversed(opens))
+
+    return trimmed.rstrip() + "…" + closers
+
+
+async def send_long_message(
+    bot,
+    chat_id: int,
+    text: str,
+    parse_mode: str = "HTML",
+    reply_markup=None,
+    disable_web_page_preview: bool = True,
+):
+    """Send a text message, automatically splitting it into several messages if
+    it exceeds Telegram's 4096-character limit (the Bot API rejects longer
+    texts with HTTP 400 'TOO_LONG').
+
+    Returns the first sent Message (or None when the text was empty).
+    Only the last chunk carries the reply keyboard.
+    """
+    if not text:
+        return None
+    chunks = split_message(text, TG_TEXT_LIMIT)
+    first = None
+    for idx, chunk in enumerate(chunks):
+        sent = await bot.send_message(
+            chat_id=chat_id,
+            text=chunk,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup if idx == len(chunks) - 1 else None,
+            disable_web_page_preview=disable_web_page_preview,
+        )
+        if first is None:
+            first = sent
+    if len(chunks) > 1:
+        logger.info(f"Split long message ({len(text)} chars) into {len(chunks)} parts for chat {chat_id}")
+    return first
 
 
 def extract_forwarded_info(message: Message) -> dict:

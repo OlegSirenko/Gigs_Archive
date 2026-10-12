@@ -1,54 +1,62 @@
 {% extends "base.html" %}
-{% block title %}{{ poster.caption | firstline }} — {{ site_title }}{% endblock %}
+{% block title %}{{ poster.caption | firstline }} — {{ site_name }}{% endblock %}
+{% block description %}Афиша мероприятия «{{ poster.caption | firstline }}» в архиве {{ site_name }}.{% endblock %}
+{% block og_title %}{{ poster.caption | firstline }} — {{ site_name }}{% endblock %}
+{% block og_description %}Афиша мероприятия «{{ poster.caption | firstline }}» в архиве {{ site_name }}.{% endblock %}
 {% block content %}
+
+<!-- СРАВНИТЕЛЬНАЯ ОТЛАДКА 
+<div style="background: #2d1b3d; color: #4ade80; padding: 15px; font-family: monospace; margin-bottom: 1rem; border-radius: 8px; font-size: 0.85rem; border: 2px solid #4ade80;">
+    <strong>СРАВНЕНИЕ:</strong><br>
+    1. Через фильтр Jinja2 (posterimg): '{{ poster | posterimg }}'<br>
+    2. Прямой вызов из Python (manual): '{{ manual_test_url }}'
+</div>-->
+
+{% set ptitle = poster.caption | firstline %}
 
 <article class="detail poster-detail">
   <div class="detail-media">
-    {% set img = poster | posterimg %}
-    {% if img %}
-      <img src="{{ img }}" alt="{{ poster.caption | firstline }}">
+    {% if poster.photo_file_id %}
+      <img src="/api/poster-image/{{ poster.id }}" 
+           alt="{{ ptitle }}" 
+           loading="lazy" data-tint>
     {% else %}
-      <div class="poster-placeholder big"><span>{{ poster.caption | firstline }}</span></div>
-      <p class="hint">Image lives in Telegram — run <code>python -m web.importer</code>
-        (or set <code>POSTER_IMAGE_URL_TEMPLATE</code>) to show it here.</p>
+      <div class="poster-placeholder big"><span class="ransomify rn-tiny" data-ransom="{{ ptitle }}">{{ ptitle }}</span></div>
     {% endif %}
   </div>
 
   <div class="detail-body">
-    <h1>{{ poster.caption | firstline }}</h1>
+    <!-- Заголовок-вырезка в стиле всего сайта (ransom note, набор рендерит main.js) -->
+    <!-- <h1 class="detail-title ransomify" data-ransom="{{ ptitle }}">{{ ptitle }}</h1> -->
 
     {% if poster.event_date %}
-      <p class="event-date">📅 {{ poster.event_date.strftime('%A, %d %B %Y, %H:%M') }}</p>
+      <p class="event-date"> {{ poster.event_date | ru_date }}</p>
     {% endif %}
 
     {% if poster.caption %}
-      <div class="caption">{{ poster.caption }}</div>
+      <!-- Instagram-style карточка с описанием -->
+      <div class="caption-card">
+        <div class="caption-body">
+          {{ poster.caption | renderbody | safe }}
+        </div>
+      </div>
     {% endif %}
 
     <p class="meta muted">
       {% if not poster.is_anonymous and poster.user and poster.user.username %}
-        Posted by @{{ poster.user.username }} ·
+        Опубликовал @{{ poster.user.username }} ·
       {% else %}
-        Posted anonymously ·
+        Опубликовано анонимно ·
       {% endif %}
-      {{ poster.view_count or 0 }} views
+      {{ poster.view_count or 0 }} просмотров
     </p>
 
     <div class="detail-actions">
       {% set tglink = poster | tglink %}
-      {% if tglink %}<a class="btn btn-primary" href="{{ tglink }}" target="_blank" rel="noopener">Open in Telegram ↗</a>{% endif %}
-      <a class="btn" href="/posters">← All posters</a>
+      {% if tglink %}<a class="btn btn-primary" href="{{ tglink }}" target="_blank" rel="noopener">Открыть в Telegram ↗</a>{% endif %}
+      <a class="btn btn-secondary" href="/posters">← Все афиши</a>
     </div>
   </div>
 </article>
-
-{% if related_articles %}
-<section>
-  <h2>Read more about this event</h2>
-  <div class="grid grid-articles">
-    {% for a in related_articles %}{% include "_article_card.html" %}{% endfor %}
-  </div>
-</section>
-{% endif %}
 
 {% endblock %}

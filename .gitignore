@@ -1,3 +1,21 @@
-# Python bytecode and cache
 __pycache__/
+
 *.pyc
+
+*.db
+
+/posters_web.db
+
+
+.idea/*
+
+.env
+
+logs/
+*.log
+
+/web_static/uploads/*
+/web_static/img/watermarks/*
+
+web/admin_passwords.json
+

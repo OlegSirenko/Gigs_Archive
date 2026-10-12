@@ -1,62 +1,132 @@
-"""FastAPI application factory for the Gigs Archive web site."""
-
 import os
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 
 from web.config import settings
+from web.articles_db import articles_db_path, init_articles_db
 from web.database import init_web_db
-from web.posters import first_line, poster_image_url, telegram_post_link
-from web.helpers import render_body
-from web.routes import admin as admin_routes
 from web.routes import public as public_routes
+from web.routes import admin as admin_routes
+from web.sitemap import register_seo_routes
 
-WEB_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_ROOT = os.path.join(os.path.dirname(WEB_DIR), "web_static")
+# ИСПРАВЛЕННЫЕ ИМПОРТЫ (разделены по правильным файлам)
+from web.helpers import render_body, first_line, poster_image_url
+from web.cancelled_images import ensure_uploads_dirs, init_web_settings
+from web.database import sync_web_posters
+from web.posters import telegram_post_link
 
+from web import i18n_web
 
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.site_title,
-        docs_url=None, redoc_url=None,  # keep the site clean; use code as docs
+        docs_url=None, 
+        redoc_url=None,
     )
 
-    # Ensure shared DB tables exist (bot tables + web_articles).
+    # 0. Гарантируем существование таблиц:
+    #    - общая база бота (users, posters) — gigs_archive.db
+    #    - отдельная база статей (web_articles) — articles.db
+    # create_all() идемпотентен: уже созданные таблицы и данные не трогаются.
     init_web_db()
+    init_articles_db()
 
-    # Static files: CSS/JS + imported Telegram poster images (/static/posters/...)
+    # Веб-база афиш (posters_web.db): таблица настроек + копия одобренных
+    # событий из базы бота. Идемпотентно; базу бота не меняем никогда.
+    try:
+        init_web_settings()
+        sync_web_posters()
+    except Exception as exc:            # сайт должен подняться даже без БД
+        print(f"[web] posters_web.db sync skipped: {exc}")
+
+    # 1. Подключение статических файлов (CSS, JS, картинки)
+    static_dir = os.path.join(os.path.dirname(__file__), "..", "web_static")
+    os.makedirs(static_dir, exist_ok=True)
     os.makedirs(settings.posters_dir, exist_ok=True)
-    app.mount("/static", StaticFiles(directory=STATIC_ROOT), name="static")
 
-    # Shared template engine with our filters
-    templates = Jinja2Templates(directory=os.path.join(WEB_DIR, "templates"))
+    # Картинки, загружаемые из админки (вставки в текст и обложки):
+    # web_static/uploads -> /static/uploads (через тот же StaticFiles mount)
+    from web.image_storage import ensure_uploads_dir
+    ensure_uploads_dir()
+    ensure_uploads_dirs()  # кэш картинок с водяным знаком «Отменено»
+    
+    # Fix: Ensure static directory exists and mount properly
+    if not os.path.exists(static_dir):
+        os.makedirs(static_dir, exist_ok=True)
+    
+    # Mount static files with proper configuration
+    app.mount("/static", StaticFiles(directory=static_dir, check_dir=False), name="static")
+
+    templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+    templates = Jinja2Templates(directory=templates_dir)
+    
     templates.env.filters["firstline"] = first_line
     templates.env.filters["posterimg"] = poster_image_url
+    
+    # !!! ДОБАВИТЬ ЭТИ ДВЕ СТРОКИ !!!
+    print(f"!!! [APP.PY] Фильтр 'posterimg' указывает на функцию из модуля: {poster_image_url.__module__}")
+    print(f"!!! [APP.PY] Адрес функции в памяти: {id(poster_image_url)}")
+    
     templates.env.filters["tglink"] = telegram_post_link
     templates.env.filters["renderbody"] = render_body
+    templates.env.filters["ru_date"] = i18n_web.ru_date
+    templates.env.filters["ru_datetime"] = i18n_web.ru_datetime
+    templates.env.filters["ru_date_short"] = i18n_web.ru_date_short
+    templates.env.filters["kind_label"] = i18n_web.kind_label
+    
     app.state.templates = templates
 
+    # 3. Подключение роутеров (самое важное!)
     app.include_router(public_routes.router)
     app.include_router(admin_routes.router)
 
+    # 3b. sitemap.xml и robots.txt для Яндекса (генерируются на лету из БД)
+    register_seo_routes(app)
+
+    # 4. Обработчик 404
     @app.exception_handler(404)
     async def not_found(request: Request, exc):
-        return templates.TemplateResponse("404.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "404.html", {
             "site_title": settings.site_title,
+            "site_name": settings.site_name,
+            "site_description": settings.site_description,
+            "site_url": settings.site_url,
+            "canonical_url": None,
             "telegram_channel": settings.telegram_channel,
             "current_user": None,
         }, status_code=404)
 
+    # 5. Health check
     @app.get("/healthz", response_class=HTMLResponse, include_in_schema=False)
     def health():
         ok = os.path.isfile(settings.database_path)
-        return f"<pre>Gigs Archive web — DB: {settings.database_path} ({'found' if ok else 'not created yet'})</pre>"
+        ok_articles = os.path.isfile(articles_db_path)
+        return ("<pre>Gigs Archive web — DB: %s (%s) | Articles DB: %s (%s)</pre>"
+                % (settings.database_path, 'found' if ok else 'not created yet',
+                   articles_db_path, 'found' if ok_articles else 'not created yet'))
+
+    @app.get("/yandex_c0cfda208163f11a.html", response_class=HTMLResponse)
+    async def yandex_verification():
+        return """
+        <html>
+            <head>
+                <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+            </head>
+            <body>Verification: c0cfda208163f11a</body>
+        </html>
+        """
+
+    # Отладочный вывод маршрутов
+    print("\n=== ЗАРЕГИСТРИРОВАННЫЕ МАРШРУТЫ ===")
+    for route in app.routes:
+        if hasattr(route, "path"):
+            print(f" -> {route.path}")
+    print("=====================================\n")
 
     return app
 
-
+# Создаем экземпляр приложения для uvicorn
 app = create_app()

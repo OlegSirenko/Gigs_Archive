@@ -1,52 +1,266 @@
 {% extends "base.html" %}
-{% block title %}{{ site_title }} — live gig posters & scene interviews{% endblock %}
+
+{% block title %}{{ site_name }} — Все концерты на одной стене{% endblock %}
+{% block description %}{{ site_description }}{% endblock %}
+{% block og_title %}{{ site_name }} — Все концерты на одной стене{% endblock %}
+
+{% block header %}
+<div class="bg-animation"></div>
+<nav class="navbar" id="navbar">
+    <a href="/" class="nav-logo">
+        <img src="/static/img/logo.jpg" alt="Logo" class="nav-logo-img" onerror="this.style.display='none'">
+        <span class="nav-logo-text ransomify-logo" data-ransom-seed="logo:Gigs1335" aria-label="Gigs Archive"><span class="rn-logo-cut rn-logo-letter">G</span><span class="rn-logo-cut rn-logo-letter">i</span><span class="rn-logo-cut rn-logo-letter">g</span><span class="rn-logo-cut rn-logo-letter">s</span> <span class="rn-logo-cut rn-logo-word">Archive</span></span>
+    </a>
+    <ul class="nav-links" id="navLinks">
+        <li><a href="#events">Афиши</a></li>
+        <li><a href="#articles">Статьи</a></li>
+        <li><a href="#how-it-works">Как это работает</a></li>
+        <li>
+            <a href="https://t.me/GigsArchive" class="nav-telegram" target="_blank">
+                Telegram
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M7 17L17 7M17 7H7M17 7V17"/>
+                </svg>
+            </a>
+        </li>
+    </ul>
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Меню">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+        </svg>
+    </button>
+</nav>
+{% endblock %}
+
 {% block content %}
+<style>
+    main.container { max-width: 100% !important; padding: 0 !important; }
+    .navbar { background: rgba(10, 10, 15, .92) !important; border-bottom: 3px double var(--gold) !important; }
+    .navbar.scrolled { background: rgba(10, 10, 15, 0.98) !important; }
+</style>
+
 
 <section class="hero">
-  <h1>Every gig on one wall.</h1>
-  <p class="lead">
-    Posters published by the community via our Telegram bot — collected, moderated
-    and archived here. Long reads by the editors: interviews with musicians and
-    reviews of what actually happened on stage.
-  </p>
-  <div class="hero-actions">
-    <a class="btn btn-primary" href="/posters">Browse {{ total_events }} posters</a>
-    <a class="btn" href="/articles">Read articles</a>
-  </div>
+    <div class="hero-container">
+        <!-- Текстовая часть -->
+        <div style="flex: 1;">
+            <div class="hero-badge">
+                <span class="hero-badge-dot"></span>
+                Обновлено сегодня
+            </div>
+            <!-- Заголовок-вырезка: ransom note набор (fallback — обычный текст до JS) -->
+            <h1 class="hero-title">
+                <span class="ransomify" data-ransom="ВСЕ КОНЦЕРТЫ">ВСЕ КОНЦЕРТЫ</span><br>
+                <span class="rn-paper">на одной</span> <span class="ransomify" data-ransom="СТЕНЕ">СТЕНЕ</span>
+            </h1>
+            <p class="hero-description">
+                Афиши, которые публикует сообщество через нашего Telegram-бота — собраны, 
+                проверены и сохранены здесь. Большие тексты от редакции: интервью с 
+                музыкантами и репортажи о том, что происходило на сцене.
+            </p>
+            <div class="hero-actions">
+                <a href="#events" class="btn btn-primary">
+                    Смотреть афиши
+                    <span style="background: rgba(10,10,15,.85); color: var(--gold); padding: 0.1rem 0.45rem; border: 1px solid var(--gold); font-size: 0.85rem;">{{ total_events }}</span>
+                </a>
+                <a href="#articles" class="btn btn-secondary">Читать статьи</a>
+            </div>
+            <div class="hero-stats">
+                <div class="stat-item">
+                    <span class="stat-number" data-target="{{ total_events }}">0</span>
+                    <span class="stat-label">Событий</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" data-target="{{ total_articles }}">0</span>
+                    <span class="stat-label">Статей</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Круглая картинка (как аватар Telegram) -->
+        <!-- <div class="hero-image-wrapper">
+            
+            <img src="/static/img/logo.jpg" 
+                 alt="Gigs Archive Avatar" 
+                 class="hero-circle-image"
+                 onerror="this.src='https://images.unsplash.com/photo-1493225255756-d9584f8606e9?w=400&h=400&fit=crop&crop=center'">
+        </div> -->
+      </div>
 </section>
 
-{% if upcoming %}
-<section>
-  <h2>Upcoming events</h2>
-  <div class="grid">
-    {% for p in upcoming %}
-      {% include "_poster_card.html" %}
-    {% endfor %}
-  </div>
+<!-- Upcoming Events -->
+<section class="section" id="events">
+    <div class="section-container">
+        <div class="section-header reveal">
+            <h2 class="section-title">SOON</h2>
+            <a href="/posters" class="section-link">Все афиши →</a>
+        </div>
+        
+        {% if upcoming %}
+        <div class="events-grid">
+            {% for p in upcoming %}
+            <a href="/posters/{{ p.id }}" class="event-card reveal">
+                <div class="event-card-image scrap-frame">
+                    {% set img = p | posterimg %}
+                    {% if img %}
+                        <img src="{{ img }}" alt="{{ p.caption | firstline }}" loading="lazy" data-tint>
+                    {% else %}
+                        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(-45deg, #14141d 0 14px, #1b1626 14px 28px);color:var(--gold);font-size:2.4rem;">🎸</div>
+                    {% endif %}
+                    {% if p.event_date %}
+                        <span class="event-date-badge">{{ p.event_date | ru_date_short }}</span>
+                    {% endif %}
+                    {% if p.is_soon %}
+                        <!-- Зелёный бейдж «Сегодня» — справа, симметрично дате -->
+                        <span class="event-soon-badge">Сегодня</span>
+                    {% endif %}
+                </div>
+                <div class="event-card-body">
+                    <h3 class="event-card-title">{{ p.caption | firstline }}</h3>
+                    <div class="event-card-meta">
+                        {% if p.event_date %}
+                        <div class="event-meta-item">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                            {{ p.event_date | ru_date }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <span class="event-tag">Концерт</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">
+            <p>Пока нет скорых событий. Загляните позже или добавьте свою афишу через бота!</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+<!-- Недавно прошедшие события -->
+{% if past_events %}
+<section class="section" id="past-events" style="background: var(--bg-secondary); border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color);">
+    <div class="section-container">
+        <div class="section-header reveal">
+            <h2 class="section-title">Недавно прошедшие</h2>
+            <a href="/posters" class="section-link">Весь архив →</a>
+        </div>
+        <div class="events-grid">
+            {% for p in past_events %}
+            <a href="/posters/{{ p.id }}" class="event-card reveal" data-scrap="{{ p.id }}">
+                <div class="event-card-image scrap-frame">
+                    {% set img = p | posterimg %}
+                    {% if img %}
+                        <img src="{{ img }}" alt="{{ p.caption | firstline }}" loading="lazy" data-tint>
+                    {% else %}
+                        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(-45deg, #14141d 0 14px, #1b1626 14px 28px);color:var(--gold);font-size:2.4rem;">🎸</div>
+                    {% endif %}
+                    {% if p.event_date %}
+                        <!-- Бейдж прошедшего события — «погашен» -->
+                        <span class="event-date-badge" style="background: var(--text-muted); color: var(--ink);">{{ p.event_date | ru_date_short }}</span>
+                    {% endif %}
+                </div>
+                <div class="event-card-body">
+                    <!-- <h3 class="event-card-title">{{ p.caption | firstline }}</h3> -->
+                    <div class="event-card-meta">
+                        {% if p.event_date %}
+                        <div class="event-meta-item">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                            {{ p.event_date | ru_date }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <!-- Серый тег -->
+                    <span class="event-tag" style="color: var(--red); border-color: var(--red); background: transparent;">Прошло</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
 </section>
 {% endif %}
-
-{% if recent_articles %}
-<section>
-  <div class="section-head">
-    <h2>From the editors</h2>
-    <a class="more" href="/articles">All articles →</a>
-  </div>
-  <div class="grid grid-articles">
-    {% for a in recent_articles %}
-      {% include "_article_card.html" %}
-    {% endfor %}
-  </div>
+<!-- Articles -->
+<section class="section" id="articles" style="background: var(--bg-secondary); border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color);">
+    <div class="section-container">
+        <div class="section-header reveal">
+            <h2 class="section-title">Последние статьи</h2>
+            <a href="/articles" class="section-link">Все статьи →</a>
+        </div>
+        
+        {% if recent_articles %}
+        <div class="articles-grid">
+            <!-- Карточки статей — тот же разметка-шаблон, что и на /articles -->
+            {% for a in recent_articles %}{% include "_article_card.html" %}{% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">
+            <p>Статьи скоро появятся. Следите за обновлениями!</p>
+        </div>
+        {% endif %}
+    </div>
 </section>
-{% endif %}
 
-{% if not upcoming and not recent_articles %}
-<section class="empty">
-  <p>Nothing here yet. The archive fills up as moderators approve posters in
-     <a href="https://t.me/{{ telegram_channel }}">the Telegram channel</a>,
-     and admins publish interviews &amp; reviews from the
-     <a href="/admin">admin panel</a>.</p>
+<!-- How it works -->
+<section class="section how-it-works" id="how-it-works">
+    <div class="section-container">
+        <div class="section-header reveal" style="justify-content: center; text-align: center; flex-direction: column; gap: 0.5rem;">
+            <h2 class="section-title">Как это работает</h2>
+            <p style="color: var(--text-secondary); max-width: 500px; font-family: var(--font-type);">Три простых шага от анонса до архива</p>
+        </div>
+        <div class="steps-grid">
+            <div class="step-card reveal tape">
+                <div class="step-icon">📤</div>
+                <div class="step-number">Шаг 01</div>
+                <h3 class="step-title">Отправьте афишу</h3>
+                <p class="step-description">Пользователи присылают анонсы концертов через нашего Telegram-бота</p>
+            </div>
+            <div class="step-card reveal tape">
+                <div class="step-icon">✅</div>
+                <div class="step-number">Шаг 02</div>
+                <h3 class="step-title">Проверка</h3>
+                <p class="step-description">Редакция проверяет информацию и добавляет событие в базу</p>
+            </div>
+            <div class="step-card reveal tape">
+                <div class="step-icon">📚</div>
+                <div class="step-number">Шаг 03</div>
+                <h3 class="step-title">Архив</h3>
+                <p class="step-description">Все события сохраняются и становятся доступны каждому</p>
+            </div>
+        </div>
+    </div>
 </section>
-{% endif %}
 
+<!-- CTA -->
+<section class="section cta-section">
+    <div class="section-container">
+        <div class="cta-box reveal">
+            <h2 class="cta-title"><span class="ransomify" data-ransom="ЗНАЕТЕ О КОНЦЕРТЕ?">ЗНАЕТЕ О КОНЦЕРТЕ?</span><br><span class="rn-dark">Поделитесь с нами</span></h2>
+            <p class="cta-description">Отправьте афишу через Telegram-бота и помогите сохранить историю живой музыки</p>
+            <div class="cta-actions">
+                <a href="https://t.me/Gigs_archive_bot" class="btn btn-primary" target="_blank">
+                    Открыть Telegram-бота
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
+                </a>
+                <a href="#how-it-works" class="btn btn-secondary">Узнать больше</a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block footer %}
+<!-- Новый футер только для главной -->
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-left">
+            <span></span>
+            <span>© 2026 Gigs Archive. Сделано с любовью к музыке.</span>
+        </div>
+        <div class="footer-links">
+            <a href="https://github.com/OlegSirenko/Gigs_Archive" target="_blank">GitHub</a>
+            <a href="https://t.me/{{ telegram_channel }}" target="_blank">Telegram</a>
+            <a href="/admin">I'm Admin</a>
+        </div>
+    </div>
+</footer>
 {% endblock %}

@@ -1,77 +1,214 @@
-"""Public site routes: home, posters (re-posted from Telegram), articles."""
-
-from datetime import datetime
-
-from fastapi import APIRouter, Query, Request
+import os
+import time
+from datetime import datetime, timedelta
+from fastapi import APIRouter, BackgroundTasks, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse  # <-- ДОБАВЬТЕ RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
-from sqlalchemy.orm import joinedload, lazyload, noload
+from sqlalchemy.orm import joinedload, noload
 
+from web.articles_db import Article, get_article_session
 from web.auth import get_current_user
 from web.config import settings
-from web.database import ModerationStatus, Poster, User, Article, get_session
-from web.helpers import render_body
-from web.posters import first_line, poster_image_url, telegram_post_link
+from web.database import (ModerationStatus, Poster, User, get_session,
+                          sync_web_posters)
+from web.cancelled_images import (cancelled_image_url, get_cancelled_label,
+                                  is_cancelled, render_and_cache)
+from web.helpers import attach_cancel_flags, render_body
+from web.posters import first_line, telegram_post_link
+from web.helpers import poster_image_url
+from web import i18n_web
+import httpx
+from fastapi.responses import HTMLResponse, StreamingResponse, Response
+import aiohttp
+from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse
+
+
 
 router = APIRouter()
 
+# Инициализация Jinja2 и фильтров (как в оригинальном проекте)
 templates = Jinja2Templates(directory="web/templates")
 templates.env.filters["firstline"] = first_line
 templates.env.filters["posterimg"] = poster_image_url
 templates.env.filters["tglink"] = telegram_post_link
 templates.env.filters["renderbody"] = render_body
-noload_poster = noload(Article.poster)
+templates.env.filters["ru_date"] = i18n_web.ru_date
+templates.env.filters["ru_datetime"] = i18n_web.ru_datetime
+templates.env.filters["ru_date_short"] = i18n_web.ru_date_short
+templates.env.filters["kind_label"] = i18n_web.kind_label
+
+# Last successful lazy-sync timestamp (see _refresh_web_db_throttled).
+_last_web_sync_ts: float | None = None
+
+
+def _attach_posters(articles):
+    """Articles live in a separate DB from posters, so the ORM relationship is
+    gone; load linked posters manually and attach them as a plain attribute
+    (readable by templates after the session is closed)."""
+    ids = {a.poster_id for a in articles if a.poster_id}
+    if not ids:
+        return
+    with get_session() as s:
+        by_id = {p.id: p for p in s.query(Poster).filter(Poster.id.in_(ids)).all()}
+    for a in articles:
+        a.poster = by_id.get(a.poster_id)
+
+def _refresh_web_db_throttled() -> None:
+    """Lazy sync of posters_web.db from the bot DB (gigs_archive.db).
+
+    Trigger points for updating posters_web.db:
+      1. App startup (web/app.py) — full sync when the site boots;
+      2. Admin panel "Синхронизировать" button (POST /admin/posters/sync);
+      3. THIS one — on public page requests, at most once every
+         WEB_SYNC_MIN_INTERVAL minutes (default 5), so freshly approved
+         events appear on the site even if nobody restarts it or clicks
+         the button. The sync is cheap (one indexed SELECT + upserts of
+         rows that actually changed) and idempotent.
+    Set WEB_SYNC_MIN_INTERVAL=0 to disable request-time syncing entirely.
+    Never touches gigs_archive.db; cancel flags in the web DB are preserved.
+    """
+    global _last_web_sync_ts
+    min_interval = max(0, int(settings.sync_min_interval_minutes)) * 60
+    if min_interval == 0:
+        return
+    now = time.monotonic()
+    if _last_web_sync_ts and (now - _last_web_sync_ts) < min_interval:
+        return
+    _last_web_sync_ts = now  # set BEFORE the work so failures don't retry per-request
+    try:
+        added = sync_web_posters()
+        if added:
+            print(f"[web] lazy sync: {added} new event(s) copied to posters_web.db")
+    except Exception as exc:
+        print(f"[web] lazy sync skipped: {exc}")
 
 
 def _ctx(request: Request, **extra):
     user = get_current_user(request)
+    try:
+        cancelled_label = get_cancelled_label()
+    except Exception:
+        cancelled_label = ""
     return {
-        "request": request,
         "site_title": settings.site_title,
+        "site_name": settings.site_name,
+        "site_description": settings.site_description,
+        "site_url": settings.site_url,
+        # Полный абсолютный URL текущей страницы для canonical/og:url
+        "canonical_url": (settings.site_url or str(request.base_url).rstrip("/")) + request.url.path,
         "telegram_channel": settings.telegram_channel,
         "current_user": user,
         "now": datetime.now(),
+        "timedelta": timedelta,
+        # Сло для водяного знака на афишах отменённых событий (правится в
+        # админке -> «Настройки»). Пустная строка, если веб-БД ещё не создана.
+        "cancelled_label": cancelled_label,
         **extra,
     }
 
+def _event_dt(p: Poster):
+    """Нормализует дату события для корректного сравнения с now().
 
-# ---------------- Home ----------------
+    Проблема: event_date может храниться как дата без времени (полночь,
+    например из date-picker в боте) или как datetime с временем.
+    Наивная полночь «сегодня» (00:00) при now()==04:45 ошибочно считалась
+    прошедшей, хотя концерт в 20:00 ещё не начался.
 
+    Правила:
+    - если время события == 00:00 (дата без времени) — событие «весь день»:
+      оно считается прошедшим только после окончания текущих суток;
+    - иначе сравниваем дату+время напрямую.
+    """
+    dt = p.event_date
+    if dt is None:
+        return None
+    if isinstance(dt, datetime):
+        d = dt
+    else:  # date без времени
+        d = datetime.combine(dt, datetime.min.time())
+    if d.hour == 0 and d.minute == 0 and d.second == 0:
+        # дата хранится без времени -> событие актуально до конца суток
+        return d.replace(hour=23, minute=59, second=59)
+    return d
+
+
+# ---------------- Home (Главная страница) ----------------
 @router.get("/")
 def home(request: Request):
+    # Обновляем posters_web.db из базы бота не чаще раза в
+    # WEB_SYNC_MIN_INTERVAL минут (см. _refresh_web_db_throttled).
+    _refresh_web_db_throttled()
+    now = datetime.now()
     with get_session() as s:
-        upcoming = (
-            s.query(Poster)
-            .filter(
-                Poster.status == ModerationStatus.APPROVED,
-                Poster.event_date >= datetime.now(),
+        approved = s.query(Poster).filter(Poster.status == ModerationStatus.APPROVED)
+
+        # 1. Скорые события: у них ещё НЕ наступили дата И время.
+        #    Событие «сегодня в 20:00» при now()==04:45 остаётся скорым
+        #    и получает зелёный бейдж «Сегодня».
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        raw_upcoming = (
+            approved.filter(
+                or_(
+                    Poster.event_date >= now,
+                    Poster.event_date >= today_start,
+                )
             )
             .order_by(Poster.event_date.asc())
-            .limit(6)
+            .limit(12)
             .all()
         )
+        upcoming = sorted((p for p in raw_upcoming if _event_dt(p) >= now),
+                          key=_event_dt)[:6]
+
+        # 2. Недавно прошедшие события: реально завершились (наступили
+        #    дата И время, либо законные сутки для событий без времени).
+        raw_past = (
+            approved.filter(Poster.event_date < now)
+            .order_by(Poster.event_date.desc())
+            .limit(12)
+            .all()
+        )
+        past_events = sorted((p for p in raw_past if _event_dt(p) < now),
+                             key=_event_dt, reverse=True)[:3]
+
+        # Бейдж «Сегодня»: событие пройдёт в течение ближайших суток
+        soon_cutoff = timedelta(hours=24)
+        for p in upcoming:
+            edt = _event_dt(p)
+            p.is_soon = bool(edt and now <= edt <= now + soon_cutoff)
+
+        # Флаг «отменено» из веб-БД (posters_web.db) — для карточек и штампа
+        attach_cancel_flags(upcoming)
+        attach_cancel_flags(past_events)
+
+        total_events = s.query(Poster).filter(Poster.status == ModerationStatus.APPROVED).count()
+
+    # Последние опубликованные статьи — из отдельной БД статей (articles.db)
+    with get_article_session() as sa:
         recent_articles = (
-            s.query(Article)
-            .outerjoin(Poster, Article.poster_id == Poster.id)
-            .options(joinedload(Article.poster))
+            sa.query(Article)
             .filter(Article.is_published.is_(True))
-            .order_by(Article.published_at.desc())
+            .order_by(Article.published_at.desc().nullslast(),
+                      Article.updated_at.desc())
             .limit(3)
             .all()
         )
-        total_events = (
-            s.query(Poster)
-            .filter(Poster.status == ModerationStatus.APPROVED)
-            .count()
-        )
-    return templates.TemplateResponse("index.html", _ctx(
-        request, upcoming=upcoming, recent_articles=recent_articles,
+        total_articles = (sa.query(Article)
+                          .filter(Article.is_published.is_(True)).count())
+
+    return templates.TemplateResponse(request, "index.html", _ctx(
+        request, 
+        upcoming=upcoming,
+        past_events=past_events, # Передаем новые данные
         total_events=total_events,
+        recent_articles=recent_articles,
+        total_articles=total_articles,
     ))
 
 
-# ---------------- Posters (events re-posted from Telegram) ----------------
-
+# ---------------- Posters (Афиши) ----------------
 @router.get("/posters")
 def posters_list(
     request: Request,
@@ -93,14 +230,25 @@ def posters_list(
             .limit(per_page)
             .all()
         )
+
+    # Зелёный бейдж «Сегодня»: событие ещё не прошло И пройдёт в течение суток
+    now = datetime.now()
+    soon_cutoff = now + timedelta(hours=24)
+    for p in items:
+        edt = _event_dt(p)
+        p.is_soon = bool(edt and now <= edt <= soon_cutoff)
+    attach_cancel_flags(items)
+
     pages = max(1, (total + per_page - 1) // per_page)
-    return templates.TemplateResponse("posters.html", _ctx(
+    return templates.TemplateResponse(request, "posters.html", _ctx(
         request, posters=items, q=q, page=page, pages=pages, total=total,
     ))
 
 
 @router.get("/posters/{poster_id}")
 def poster_detail(request: Request, poster_id: int):
+    print(f"!!! [ROUTE] Запрос на /posters/{poster_id}")
+    
     with get_session() as s:
         poster = (s.query(Poster)
                   .outerjoin(User, Poster.user_id == User.telegram_id)
@@ -109,26 +257,28 @@ def poster_detail(request: Request, poster_id: int):
                       Poster.id == poster_id,
                       Poster.status == ModerationStatus.APPROVED,
                   ).first())
+        
+        print(f"!!! [ROUTE] Постер из БД: {'НАЙДЕН (ID=' + str(poster.id) + ')' if poster else 'НЕ НАЙДЕН'}")
+        
         if not poster:
-            return templates.TemplateResponse("404.html", _ctx(request), status_code=404)
-        related_articles = (
-            s.query(Article)
-            .options(noload_poster)
-            .filter(Article.poster_id == poster_id,
-                    Article.is_published.is_(True))
-            .order_by(Article.published_at.desc())
-            .all()
-        )
-        # simple view counter
+            return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
+        
         poster.view_count = (poster.view_count or 0) + 1
         s.commit()
-    return templates.TemplateResponse("poster_detail.html", _ctx(
-        request, poster=poster, related_articles=related_articles,
-    ))
+        poster.is_cancelled = is_cancelled(poster.id)
+        
+        # !!! ПРЯМОЙ ВЫЗОВ ФУНКЦИИ В ОБХОД ФИЛЬТРОВ JINJA2 !!!
+        print("!!! [ПРЯМОЙ ВЫЗОВ] Вызываю poster_image_url напрямую из Python-кода...")
+        manual_url = poster_image_url(poster)
+        print(f"!!! [ПРЯМОЙ ВЫЗОВ] Результат прямого вызова: {manual_url}")
+        
+        return templates.TemplateResponse(request, "poster_detail.html", _ctx(
+            request, 
+            poster=poster,
+            manual_test_url=manual_url  # <-- Передаем результат в шаблон
+        ))
 
-
-# ---------------- Articles (admin long-form content) ----------------
-
+# ---------------- Articles (Статьи) ----------------
 @router.get("/articles")
 def articles_list(
     request: Request,
@@ -136,36 +286,106 @@ def articles_list(
     page: int = Query(1, ge=1),
     per_page: int = 12,
 ):
-    with get_session() as s:
+    with get_article_session() as s:
         query = s.query(Article).filter(Article.is_published.is_(True))
         if kind:
             query = query.filter(Article.kind == kind)
         total = query.count()
-        items = (
-            query.outerjoin(Poster, Article.poster_id == Poster.id)
-            .options(joinedload(Article.poster))
-            .order_by(Article.published_at.desc())
-            .offset((page - 1) * per_page)
-            .limit(per_page)
-            .all()
-        )
+        items = (query.order_by(Article.published_at.desc())
+                 .offset((page - 1) * per_page)
+                 .limit(per_page)
+                 .all())
+    _attach_posters(items)
     pages = max(1, (total + per_page - 1) // per_page)
-    return templates.TemplateResponse("articles.html", _ctx(
+    return templates.TemplateResponse(request, "articles.html", _ctx(
         request, articles=items, kind=kind, page=page, pages=pages, total=total,
     ))
 
-
 @router.get("/articles/{slug}")
 def article_detail(request: Request, slug: str):
-    with get_session() as s:
+    with get_article_session() as s:
         article = (s.query(Article)
-                   .outerjoin(Poster, Article.poster_id == Poster.id)
-                   .options(joinedload(Article.poster))
                    .filter(
                        Article.slug == slug, Article.is_published.is_(True)
                    ).first())
         if not article:
-            return templates.TemplateResponse("404.html", _ctx(request), status_code=404)
-    return templates.TemplateResponse("article_detail.html", _ctx(
+            return templates.TemplateResponse(request, "404.html", _ctx(request), status_code=404)
+    _attach_posters([article])
+    return templates.TemplateResponse(request, "article_detail.html", _ctx(
         request, article=article,
     ))
+
+
+@router.get("/api/poster-image/{poster_id}")
+async def proxy_poster_image(poster_id: int):
+    """
+    Безопасно проксирует картинку с Telegram. 
+    Токен бота остается на сервере и никогда не передается в браузер.
+    """
+    with get_session() as s:
+        poster = s.query(Poster).filter(
+            Poster.id == poster_id,
+            Poster.status == ModerationStatus.APPROVED
+        ).first()
+        
+        if not poster or not poster.photo_file_id:
+            return Response(content="Not Found", status_code=404)
+        cancelled = is_cancelled(poster.id)
+    
+    from web.config import settings
+    
+    # 1. Запрашиваем путь к файлу через Bot API (внутри сервера)
+    file_info_url = f"https://api.telegram.org/bot{settings.bot_token}/getFile"
+    
+    async with httpx.AsyncClient() as client:
+        file_resp = await client.get(file_info_url, params={"file_id": poster.photo_file_id})
+        file_data = file_resp.json()
+        
+        if not file_data.get("ok"):
+            return Response(content="Telegram API Error", status_code=502)
+            
+        file_path = file_data["result"]["file_path"]
+
+        # Отменённое событие: отдаём картинку с красным диагональным штампом
+        # (Pillow). Рендер кэшируется на диске, поэтому штамп рисуется один раз.
+        if cancelled:
+            cached = cancelled_image_url(poster)
+            if cached:
+                return RedirectResponse(cached, status_code=302)
+
+        # 2b. Already-rendered watermark sitting in the cache dir (e.g. rendered
+        # by the admin panel right after the event was marked as cancelled).
+        from web.cancelled_images import _cache_path
+        cache_file = _cache_path(poster.id)
+        if cancelled and os.path.isfile(cache_file):
+            with open(cache_file, "rb") as fh:
+                return Response(
+                    content=fh.read(), media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400"},
+                )
+        
+        # 2. Скачиваем саму картинку с CDN Telegram (внутри сервера)
+        cdn_url = f"https://api.telegram.org/file/bot{settings.bot_token}/{file_path}"
+        img_resp = await client.get(cdn_url)
+        
+        if img_resp.status_code != 200:
+            return Response(content="Failed to download image", status_code=502)
+        
+        # 3. Отдаем байты картинки браузеру напрямую из памяти нашего сервера
+        # Браузер видит только ответ от НАШЕГО домена. Токен скрыт.
+        if cancelled:
+            stamped = render_and_cache(poster.id, img_resp.content)
+            if stamped:
+                return Response(
+                    content=stamped,
+                    media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=3600"},
+                )
+
+        return Response(
+            content=img_resp.content,
+            media_type=img_resp.headers.get("content-type", "image/jpeg"),
+            headers={
+                "Cache-Control": "public, max-age=86400", # Разрешаем браузеру кэшировать на 1 день
+            }
+        )

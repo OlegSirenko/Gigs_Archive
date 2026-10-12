@@ -28,10 +28,21 @@ from bot.keyboards import (
 )
 from db.models import get_session, User, Poster
 from db.crud import get_or_create_user, create_poster, get_user_stats
-from utils.helpers import format_preview_text, validate_caption, extract_forwarded_info
+from utils.helpers import (
+    format_preview_text,
+    validate_caption,
+    extract_forwarded_info,
+    describe_telegram_error,
+    TG_CAPTION_LIMIT,
+)
 from utils.html import get_html_caption
 from utils.i18n import i18n, t
-from utils.privacy import user_needs_to_accept_privacy, get_current_privacy_version, update_user_privacy_acceptance
+from utils.privacy import (
+    user_needs_to_accept_privacy,
+    get_current_privacy_version,
+    update_user_privacy_acceptance,
+    build_privacy_text,
+)
 from config import config
 from datetime import datetime
 from sqlalchemy import delete as sql_delete
@@ -72,7 +83,7 @@ async def process_media_group_complete(message: types.Message, state: FSMContext
             is_valid = True
             error_message = ""
             if not telegram_link:
-                is_valid, error_message = validate_caption(caption)
+                is_valid, error_message = validate_caption(caption, language)
             
             if not is_valid:
                 await handle_validation_error(message, state, error_message, language)
@@ -96,7 +107,7 @@ async def process_media_group_complete(message: types.Message, state: FSMContext
             # Direct photo upload (not forwarded)
             caption = photos[0].get('caption', '')
             
-            is_valid, error_message = validate_caption(caption)
+            is_valid, error_message = validate_caption(caption, language)
             
             if not is_valid:
                 await handle_validation_error(message, state, error_message, language)
@@ -131,9 +142,19 @@ async def process_media_group_complete(message: types.Message, state: FSMContext
         
         logger.info(f"Media group processed: {len(photos)} photos from user {message.from_user.id}")
         
+    except TelegramAPIError as e:
+        logger.error(f"Telegram API error while processing media group: {e}")
+        await message.answer(
+            describe_telegram_error(e, language),
+            parse_mode="HTML",
+            reply_markup=retry_keyboard(language).as_markup(),
+        )
     except Exception as e:
-        logger.error(f"Error processing media group: {e}")
-        await message.answer(t('common.error', language))
+        logger.exception(f"Unexpected error processing media group: {e}")
+        await message.answer(
+            f"{t('common.error', language)}\n\n<code>{html.escape(str(e)[:200])}</code>",
+            parse_mode="HTML",
+        )
 
 
 async def handle_media_group_message(message: types.Message, state: FSMContext, forwarded_data: dict = None):
@@ -223,40 +244,60 @@ async def safe_edit_text(message: types.Message, text: str, reply_markup=None):
 
 
 async def handle_validation_error(message: types.Message, state: FSMContext, error_message: str, language: str):
-    """Handle validation error with cleanup and retry option"""
-    
+    """Handle validation error with cleanup and retry option.
+
+    ``error_message`` must be a ready, localized HTML explanation produced by
+    ``utils.helpers.validate_caption`` (e.g. "missing link", "too many chars").
+    It is shown to the user verbatim so they always learn the exact reason
+    their text/photo was rejected.
+    """
+
     # Delete ALL previous bot messages
     data = await state.get_data()
-    
+
     first_message_id = data.get("first_message_id")
     if first_message_id:
         try:
             await message.bot.delete_message(chat_id=message.chat.id, message_id=first_message_id)
-        except:
-            pass
-    
+        except TelegramAPIError as e:
+            logger.debug(f"Could not delete first message: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error deleting message: {e}")
+
     prev_message_id = data.get("prev_bot_message_id")
     if prev_message_id:
         try:
             await message.bot.delete_message(chat_id=message.chat.id, message_id=prev_message_id)
-        except:
-            pass
-    
-    # Send error message with retry button
+        except TelegramAPIError as e:
+            logger.debug(f"Could not delete previous message: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error deleting message: {e}")
+
+    # Safety net: never send an empty/blank explanation. If for some reason
+    # the caller passed no message, fall back to the generic "no link" error.
+    if not (error_message or "").strip():
+        error_message = (
+            f"{t('poster_flow.validation_error.no_link', language)}\n\n"
+            f"{t('poster_flow.validation_error.examples_title', language)}\n"
+            f"{t('poster_flow.validation_error.examples', language)}\n\n"
+            f"{t('poster_flow.validation_error.retry_hint', language)}"
+        )
+
+    # Send the exact validation error with retry button
     await message.answer(
-        f"{t('poster_flow.validation_error.no_link', language)}\n\n"
-        f"{t('poster_flow.validation_error.examples_title', language)}\n"
-        f"{t('poster_flow.validation_error.examples', language)}\n\n"
-        f"{t('poster_flow.validation_error.retry_hint', language)}",
+        error_message,
         parse_mode="HTML",
         reply_markup=retry_keyboard(language).as_markup()
     )
-    
+
     # Delete user's message
     try:
         await message.delete()
-    except:
-        pass
+    except TelegramAPIError as e:
+        logger.debug(f"Could not delete user message: {e}")
+    except Exception as e:
+        logger.warning(f"Unexpected error deleting user message: {e}")
+
 
 
 async def cleanup_previous_messages(message: types.Message, state: FSMContext):
@@ -342,19 +383,8 @@ async def cmd_start(message: types.Message):
 
     # If privacy needs acceptance, send it after welcome message
     if needs_privacy_acceptance:
-        privacy_text = (
-            f"{i18n.t('common.privacy_policy', language)}\n\n"
-            f"{i18n.t('common.privacy_policy_text.collect', language)}"
-            f"{i18n.t('common.privacy_policy_text.use', language)}"
-            f"{i18n.t('common.privacy_policy_text.storage', language)}"
-            f"{i18n.t('common.privacy_policy_text.rights', language)}"
-            f"{i18n.t('common.privacy_policy_text.mailing', language)}"
-            f"{i18n.t('common.privacy_policy_text.questions', language)}"
-            f"{i18n.t('common.privacy_policy_text.acception', language)}"
-        )
-
         await message.answer(
-            privacy_text,
+            build_privacy_text(language),
             parse_mode="HTML",
             reply_markup=privacy_acceptance_keyboard(language).as_markup()
         )
@@ -366,16 +396,7 @@ async def show_privacy_policy(callback: types.CallbackQuery):
 
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
 
-    privacy_text = (
-        f"{i18n.t('common.privacy_policy', language)}\n\n"
-        f"{i18n.t('common.privacy_policy_text.collect', language)}"
-        f"{i18n.t('common.privacy_policy_text.use', language)}"
-        f"{i18n.t('common.privacy_policy_text.storage', language)}"
-        f"{i18n.t('common.privacy_policy_text.rights', language)}"
-        f"{i18n.t('common.privacy_policy_text.mailing', language)}"
-        f"{i18n.t('common.privacy_policy_text.questions', language)}"
-        f"{i18n.t('common.privacy_policy_text.acception', language)}"
-    )
+    privacy_text = build_privacy_text(language)
 
     # Check if user needs to accept (new user or old version)
     with get_session() as session:
@@ -418,22 +439,28 @@ async def accept_privacy_policy(callback: types.CallbackQuery):
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     user_id = callback.from_user.id
 
+    # Answer callback FIRST to stop button loading animation.
+    # This must happen before any DB work: the Telegram button shows a
+    # spinner for ~30s and if we ever skip this call the user thinks the
+    # acceptance failed and may abandon it (a "skipped" acceptance).
+    await callback.answer()
+
     # Check if user is new (needs language selection)
     with get_session() as session:
-        user = session.query(User).filter(User.telegram_id == user_id).first()
-        if user is None:
-            # Create user if doesn't exist
-            user = get_or_create_user(
-                session,
-                telegram_id=user_id,
-                username=callback.from_user.username,
-                first_name=callback.from_user.first_name,
-                last_name=callback.from_user.last_name,
-                language_code=callback.from_user.language_code,
-                is_premium=callback.from_user.is_premium or False
-            )
+        user = get_or_create_user(
+            session,
+            telegram_id=user_id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+            last_name=callback.from_user.last_name,
+            language_code=callback.from_user.language_code,
+            is_premium=callback.from_user.is_premium or False
+        )
+
+        was_pending = user_needs_to_accept_privacy(user)
+
         update_user_privacy_acceptance(user)
-        session.commit()
+        session.commit()  # persist acceptance IMMEDIATELY - never defer it
 
         # Check if user was just created (within last 2 minutes = first start)
         is_new_user = False
@@ -441,13 +468,25 @@ async def accept_privacy_policy(callback: types.CallbackQuery):
             time_since_creation = datetime.now() - user.created_at
             is_new_user = time_since_creation.total_seconds() < 120
 
-    # Answer callback FIRST to stop button loading animation
-    await callback.answer()
+    if not was_pending:
+        # User pressed an old/deleted accept button twice - nothing to do.
+        return
 
-    # Delete the privacy policy message
+    logger.info(f"User {user_id} accepted privacy policy v{get_current_privacy_version()}")
+
+    # Disable the accept button in the message the user actually clicked
+    # (so it cannot be re-pressed later against an outdated policy version).
+    try:
+        await callback.message.edit_reply_markup(
+            reply_markup=None
+        )
+    except Exception:
+        pass  # message may be old/unchanged - acceptable
+
+    # Delete the privacy policy prompt message
     try:
         await callback.message.delete()
-    except:
+    except Exception:
         pass
 
     # If new user - show language selection
@@ -457,6 +496,11 @@ async def accept_privacy_policy(callback: types.CallbackQuery):
             f"🌐 {t('common.language', language)}\n\n"
             f"🇷🇺 Русский | 🇬🇧 English",
             reply_markup=language_selection_keyboard(language).as_markup()
+        )
+    else:
+        # Returning user re-accepted a new policy version - confirm it
+        await callback.message.answer(
+            t("common.privacy_accepted_thanks", language)
         )
 
 
@@ -819,7 +863,7 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
         is_valid = True
         error_message = ""
         if not telegram_link:
-            is_valid, error_message = validate_caption(caption)
+            is_valid, error_message = validate_caption(caption, language)
 
         if not is_valid:
             await handle_validation_error(message, state, error_message, language)
@@ -851,7 +895,7 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
         # Use get_html_caption to preserve formatting (hyperlinks, bold, italic)
         caption = get_html_caption(message)
 
-        is_valid, error_message = validate_caption(caption)
+        is_valid, error_message = validate_caption(caption, language)
 
         if not is_valid:
             await handle_validation_error(message, state, error_message, language)
@@ -917,7 +961,7 @@ async def process_photo(message: types.Message, state: FSMContext):
     caption = get_html_caption(message)
 
     # Validate caption (just check for link)
-    is_valid, error_message = validate_caption(caption)
+    is_valid, error_message = validate_caption(caption, language)
 
     if not is_valid:
         await handle_validation_error(message, state, error_message, language)
@@ -1073,6 +1117,18 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     data = await state.get_data()
 
+    # ---- Re-validate right before sending --------------------------------
+    # Captions can grow past Telegram's 1024-char photo-caption limit AFTER
+    # the initial upload check (e.g. forwarded attribution / source link is
+    # appended later in the flow). Catch it here with a clear message instead
+    # of letting the API fail with an opaque "TOO_LONG" error.
+    caption_to_send = data.get("caption", "") or ""
+    is_valid, error_message = validate_caption(caption_to_send, language)
+    if not is_valid:
+        await handle_validation_error(callback.message, state, error_message, language)
+        await callback.answer()
+        return
+
     try:
         with get_session() as session:
             poster = create_poster(
@@ -1190,9 +1246,28 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
         logger.info(f"Poster {poster.id} submitted by user {data['user_id']} (media_group={is_media_group})")
 
+    except TelegramAPIError as e:
+        # Telegram rejected our request (e.g. caption TOO_LONG, bad HTML
+        # entities, expired file reference). Tell the user exactly why.
+        logger.error(f"Submission failed (Telegram API): {e}")
+        await state.clear()
+        await callback.message.answer(
+            describe_telegram_error(e, language),
+            parse_mode="HTML",
+            reply_markup=retry_keyboard(language).as_markup(),
+        )
+        await callback.answer()
     except Exception as e:
-        logger.error(f"Submission failed: {e}")
-        await callback.answer(t('common.error', language), show_alert=True)
+        logger.exception(f"Submission failed: {e}")
+        await state.clear()
+        await callback.message.answer(
+            f"{t('common.errors.unexpected', language)}\n\n"
+            f"{t('common.errors.details_title', language)}\n"
+            f"<code>{html.escape(str(e)[:200])}</code>",
+            parse_mode="HTML",
+            reply_markup=retry_keyboard(language).as_markup(),
+        )
+        await callback.answer()
 
 @poster_router.callback_query(PosterSubmission.waiting_for_confirmation, F.data == "poster:edit")
 async def edit_submission(callback: types.CallbackQuery, state: FSMContext):

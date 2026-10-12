@@ -68,20 +68,26 @@ def poster_image_url(poster) -> str | None:
 
 def telegram_post_link(poster) -> str | None:
     """Link to the original post in the Telegram channel (t.me/c/<id>/<mid>)."""
+    # https://t.me/GigsArchive/1292
     if not poster.channel_message_id:
         return None
     chat = str(poster.channel_chat_id or "")
     if chat.startswith("-100"):
-        return f"https://t.me/c/{chat[4:]}/{poster.channel_message_id}"
+        return f"https://t.me/GigsArchive/{poster.channel_message_id}"
     return None
 
 
 def first_line(caption: str | None, fallback: str = "Event") -> str:
-    """Poster captions usually start with the event title line."""
+    """Poster captions usually start with the event title line.
+
+    Без эмодзи и без какой-либо разметки: ссылки на главной не допускаются,
+    остаётся только чистый текст.
+    """
     if not caption:
         return fallback
     for line in caption.splitlines():
-        line = line.strip()
+        from web.helpers import strip_telegram_markup, strip_emoji
+        line = strip_telegram_markup(strip_emoji(line)).strip()
         if line:
             return line[:120]
     return fallback

@@ -1,35 +1,76 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}{{ site_title }}{% endblock %}</title>
+  <title>{% block title %}{{ site_name }}{% endblock %}</title>
+  <!-- SEO / social meta tags (Google & Yandex snippets) -->
+  {% block meta %}
+  <meta name="description" content="{% block description %}{{ site_description }}{% endblock %}">
+  <meta name="robots" content="index, follow">
+  <!-- Favicon / Telegram link-preview icon -->
+  <link rel="icon" type="image/jpeg" href="/static/img/logo.jpg">
+  {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+  <!-- Open Graph: read by the Telegram link-preview bot -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ site_name }}">
+  <meta property="og:title" content="{% block og_title %}{{ site_name }}{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}{{ site_description }}{% endblock %}">
+  {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
+  {% if site_url %}<meta property="og:image" content="{{ site_url }}/static/img/logo.jpg">{% endif %}
+  {% endblock %}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Courier+Prime&family=Oswald:wght@700&family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Rubik:wght@900&family=Rubik+Mono+One&family=Special+Elite&display=swap">
   <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/ransom.css">
 </head>
-<body>
-<header class="site-header">
-  <div class="container header-inner">
-    <a class="logo" href="/">🎭 {{ site_title }}</a>
-    <nav>
-      <a href="/posters" class="{{ 'active' if request.url.path.startswith('/posters') }}">Posters</a>
-      <a href="/articles" class="{{ 'active' if request.url.path.startswith('/articles') }}">Articles</a>
-      <a href="https://t.me/{{ telegram_channel }}" target="_blank" rel="noopener">Telegram ↗</a>
-      {% if current_user and current_user.is_admin %}
-        <a href="/admin" class="nav-admin">Admin</a>
-      {% endif %}
-    </nav>
-  </div>
-</header>
+<body class="js-off">
+
+{% block header %}
+<!-- Навигационная шапка (одинаковая для всех страниц) -->
+<nav class="navbar" id="navbar">
+    <a href="/" class="nav-logo">
+        <img src="/static/img/logo.jpg" alt="Logo" class="nav-logo-img" onerror="this.style.display='none'">
+        <!-- Логотип-вырезка: G i g s — отдельные буквы, «Archive» — один лоскут (набор рендерит main.js) -->
+        <span class="nav-logo-text ransomify-logo" data-ransom-seed="logo:Gigs1335" aria-label="Gigs Archive"><span class="rn-logo-cut rn-logo-letter">G</span><span class="rn-logo-cut rn-logo-letter">i</span><span class="rn-logo-cut rn-logo-letter">g</span><span class="rn-logo-cut rn-logo-letter">s</span> <span class="rn-logo-cut rn-logo-word">Archive</span></span>
+    </a>
+    <ul class="nav-links" id="navLinks">
+        <li><a href="/posters" class="{{ 'active' if request.url.path.startswith('/posters') else '' }}">Афиши</a></li>
+        <li><a href="/articles" class="{{ 'active' if request.url.path.startswith('/articles') else '' }}">Статьи</a></li>
+        <li>
+            <a href="https://t.me/{{ telegram_channel }}" class="nav-telegram" target="_blank">
+                Telegram
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M7 17L17 7M17 7H7M17 7V17"/>
+                </svg>
+            </a>
+        </li>
+        {% if current_user and current_user.is_admin %}
+        <li><a href="/admin" class="nav-admin">Admin</a></li>
+        {% endif %}
+    </ul>
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Меню">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+        </svg>
+    </button>
+</nav>
+{% endblock %}
 
 <main class="container">
   {% block content %}{% endblock %}
 </main>
 
+{% block footer %}
 <footer class="site-footer">
   <div class="container">
-    <p>{{ site_title }} — archive of event posters, re-posted from
-       <a href="https://t.me/{{ telegram_channel }}">Telegram @{{ telegram_channel }}</a>.</p>
+    <p>{{ site_title }} — архив афиш мероприятий, репосты из
+       <a href="https://t.me/{{ telegram_channel }}">Telegram-канала @{{ telegram_channel }}</a>.</p>
   </div>
 </footer>
+{% endblock %}
+
+<script src="/static/js/main.js"></script>
 </body>
 </html>

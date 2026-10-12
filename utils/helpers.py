@@ -39,8 +39,10 @@ _EMOJI_RE = re.compile(
 
 # Остатки telegram-разметки: <a href="...">...</a>, голые URL, markdown-ссылки
 _TG_LINK_TAG_RE = re.compile(r'<a\b[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
+# <tg-emoji emoji-id="...">😀</tg-emoji> — keep the inner emoji, drop the wrapper
+_TG_EMOJI_TAG_RE = re.compile(r'<tg-emoji\b[^>]*>(.*?)</tg-emoji>', re.IGNORECASE | re.DOTALL)
 _TG_HTML_TAG_RE = re.compile(
-    r'</?\s*(?:a|u|s|strong|ins|del|b|i|em|span|pre|code|blockquote)\b[^>]*>',
+    r'</?\s*(?:a|u|s|strong|ins|del|b|i|em|span|pre|code|blockquote|tg-emoji|tg-spoiler|tg-time)\b[^>]*>',
     re.IGNORECASE,
 )
 _MD_LINK_RE = re.compile(r'\[([^\]]*)\]\((?:https?://)?[^\s)]+\)')
@@ -70,6 +72,7 @@ def strip_telegram_markup(text: str | None) -> str:
     """
     if not text:
         return ""
+    text = _TG_EMOJI_TAG_RE.sub(lambda m: m.group(1), text)
     text = _TG_LINK_TAG_RE.sub(lambda m: m.group(1), text)
     text = _MD_LINK_RE.sub(lambda m: m.group(1), text)
     text = _TG_HTML_TAG_RE.sub("", text)
@@ -356,9 +359,19 @@ def split_message(text: str, limit: int = TG_TEXT_LIMIT) -> list[str]:
     are opened inside a chunk but not closed there are closed at the end of the
     chunk and re-opened at the start of the next one. Chunks are broken at
     paragraph or word boundaries whenever possible.
+
+    ``<tg-emoji emoji-id="...">😀</tg-emoji>`` wrappers (produced when
+    re-parsing forwarded messages with custom emoji via HtmlDecoration) are
+    stripped before splitting: Telegram does not allow them in bot messages
+    anyway, and their ~30-char markup would otherwise eat into the 4096-char
+    budget and could be cut in half at a chunk boundary, making the whole
+    message unsendable ("can't parse entities"). The emoji characters
+    themselves are kept and count toward the visible length.
     """
     if not text:
         return []
+    # Drop <tg-emoji ...> wrappers everywhere (see docstring), keep inner emoji.
+    text = _TG_EMOJI_TAG_RE.sub(r"\1", text)
     if len(text) <= limit:
         return [text]
 
@@ -439,7 +452,8 @@ def plain_text_length(html_text: str) -> int:
     """
     if not html_text:
         return 0
-    without_links = _TG_LINK_TAG_RE.sub(r"\1", html_text)
+    without_emoji = _TG_EMOJI_TAG_RE.sub(r"\1", html_text)
+    without_links = _TG_LINK_TAG_RE.sub(r"\1", without_emoji)
     without_tags = _TG_HTML_TAG_RE.sub("", without_links)
     return len(html.unescape(without_tags))
 
@@ -540,8 +554,15 @@ def describe_telegram_error(error: Exception, language: str = "ru") -> str:
 def _trim_caption(caption: str, limit: int = TG_CAPTION_LIMIT) -> str:
     """Trim an HTML caption so its *visible* length fits Telegram's 1024-char
     photo-caption limit. Cuts at paragraph/word boundaries and re-balances any
-    HTML tag left open by the cut, so the result is always valid HTML."""
-    if not caption or plain_text_length(caption) <= limit:
+    HTML tag left open by the cut, so the result is always valid HTML.
+
+    ``<tg-emoji ...>`` wrappers are stripped first (they are not allowed in
+    bot-sent messages and their markup must not count toward the visible
+    length or be cut mid-tag)."""
+    if not caption:
+        return caption
+    caption = _TG_EMOJI_TAG_RE.sub(r"\1", caption)
+    if plain_text_length(caption) <= limit:
         return caption
 
     tag_re = re.compile(r"<(/?)(b|i|u|s|a|code|pre|blockquote)(\s[^>]*)?>", re.IGNORECASE)

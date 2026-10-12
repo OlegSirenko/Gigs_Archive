@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+
 *.db
 
 /posters_web.db
@@ -9,7 +10,8 @@ __pycache__/
 
 .env
 
-
+logs/
+*.log
 
 /web_static/uploads/*
 /web_static/img/watermarks/*

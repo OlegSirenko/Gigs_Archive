@@ -94,7 +94,10 @@
       "no_link": "⚠️ Please add at least one link to the event.",
       "examples_title": "<i>Examples:</i>",
       "examples": "• example.com\n• https://tickets.com\n• t.me/myevent",
-      "retry_hint": "<i>Click the button below to try again.</i>"
+      "retry_hint": "<i>Click the button below to try again.</i>",
+      "empty": "⚠️ The description is missing. Please add text with a link to the event.",
+      "too_long": "⚠️ Description too long: <b>{current}</b> characters, but Telegram allows at most <b>{limit}</b> for a photo caption ({excess} over the limit).",
+      "too_long_hint": "<i>What you can do:</i>\n• Shorten the text — keep only the title, date and venue.\n• Move the detailed program to the linked website.\n• Remove long lists of links — one is enough."
     },
     "anonymous": {
       "title": "🔐 <b>Privacy Settings</b>",
@@ -291,17 +294,17 @@
     "language_hint": "ℹ️ Use command /language to change it.",
     "language_ru": "🇷🇺 Русский",
     "language_en": "🇬🇧 English",
-    "privacy_policy":"🔐 Privacy Policy",
+    "privacy_policy": "🔐 Privacy Policy",
     "privacy_accept": "✅ Accept Privacy Policy",
     "no_caption": "No caption",
     "privacy_policy_text": {
-      "collect":"📊 <b>We collect:</b>\n• Telegram ID, name, username\n• Poster content (photo, text, date)\n• Anonymity and mailing settings\n\n",
-      "use":"🎯 <b>We use:</b>\n• For channel publication\n• For content moderation\n• For statistics and mailings\n\n",
-      "storage":"🔒 <b>We store:</b>\n• Locally in Belarus\n• Access only for developer\n• Backups for 7 days\n\n",
+      "collect": "📊 <b>We collect:</b>\n• Telegram ID, name, username\n• Poster content (photo, text, date)\n• Anonymity and mailing settings\n\n",
+      "use": "🎯 <b>We use:</b>\n• For channel publication\n• For content moderation\n• For statistics and mailings\n\n",
+      "storage": "🔒 <b>We store:</b>\n• Locally in Belarus\n• Access only for developer\n• Backups for 7 days\n\n",
       "rights": "✅ <b>Your rights (Law No. 99-Z):</b>\n• Access to data (5 days)\n• Correction and deletion (15 days)\n• Consent withdrawal\n• Unsubscribe from mailing (/sub_off)\n\n",
-      "mailing":"📬 <b>Mailing:</b>\n• Fridays at 14:30\n• Unsubscribe via /sub_off\n\n",
-      "questions":"❓ <b>Questions:</b>\nt.me/GigsArchive?direct\n\n",
-      "acception":"<i>To continue using the bot, you must accept the privacy policy. Data processing is carried out in accordance with the Law of the Republic of Belarus 'On Personal Data Protection'.</i>"
+      "mailing": "📬 <b>Mailing:</b>\n• Fridays at 14:30\n• Unsubscribe via /sub_off\n\n",
+      "questions": "❓ <b>Questions:</b>\nt.me/GigsArchive?direct\n\n",
+      "acception": "<i>To continue using the bot, you must accept the privacy policy. Data processing is carried out in accordance with the Law of the Republic of Belarus 'On Personal Data Protection'.</i>"
     },
     "delete_data": "🗑️ Delete My Data",
     "delete_account": {
@@ -316,7 +319,21 @@
       "error": "⚠️ An error occurred during deletion. Try again or contact the administrator.",
       "warning": "❗ <b>Warning!</b>",
       "posters_note": "Published posters in the channel will not be deleted automatically. To remove publications, contact the administrator."
-    }
+    },
+    "errors": {
+      "too_long": "⚠️ The text or caption is too long for Telegram (character limit exceeded). Please shorten the description and try again.",
+      "bad_html": "⚠️ Could not render the text: it contains invalid HTML formatting (e.g. unclosed <b>, <i> tags or links). Fix the formatting and try again.",
+      "file_expired": "⚠️ The image reference has expired. Please send the photo again.",
+      "file_too_big": "⚠️ The file is too large for Telegram. Try sending a smaller image.",
+      "chat_not_found": "⚠️ Could not find the required chat (channel or moderation group). Make sure the bot is added there as an administrator.",
+      "bot_blocked": "⚠️ The user has blocked the bot, so the notification could not be delivered.",
+      "unexpected": "⚠️ An unexpected error occurred. Please try again; if it keeps happening, contact the administrator.",
+      "details_title": "<i>Error details:</i>"
+    },
+    "privacy_decline": "❌ Decline (delete my data)",
+    "privacy_accepted_thanks": "✅ Thank you! Your acceptance of the privacy policy has been recorded. You can continue using the bot.",
+    "privacy_required_alert": "Please accept the privacy policy first",
+    "privacy_required_hint": "⚠️ Please read and accept the privacy policy above to use the bot. Every action requires acceptance — press ✅ Accept or ❌ Decline."
   },
   "weekly_summary": {
     "title": "📊 <b>Weekly Event Summary</b>",

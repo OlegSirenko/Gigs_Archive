@@ -53,7 +53,12 @@ def create_app() -> FastAPI:
     ensure_uploads_dir()
     ensure_uploads_dirs()  # кэш картинок с водяным знаком «Отменено»
     
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    # Fix: Ensure static directory exists and mount properly
+    if not os.path.exists(static_dir):
+        os.makedirs(static_dir, exist_ok=True)
+    
+    # Mount static files with proper configuration
+    app.mount("/static", StaticFiles(directory=static_dir, check_dir=False), name="static")
 
     templates_dir = os.path.join(os.path.dirname(__file__), "templates")
     templates = Jinja2Templates(directory=templates_dir)

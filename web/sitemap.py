@@ -37,10 +37,11 @@ MSK = timezone(timedelta(hours=3))
 def _base_url(request: Request) -> str:
     """Absolute site origin: SITE_URL env var wins, Host header is fallback."""
     if settings.site_url:
-        return settings.site_url
+        # Sanitize: replace backslashes with forward slashes
+        return settings.site_url.replace("\\", "/")
     forwarded_proto = request.headers.get("x-forwarded-proto")
-    scheme = forwarded_proto or request.url.scheme
-    host = request.headers.get("host") or request.url.netloc
+    scheme = (forwarded_proto or request.url.scheme).replace("\\", "/")
+    host = (request.headers.get("host") or request.url.netloc).replace("\\", "/")
     return f"{scheme}://{host}"
 
 

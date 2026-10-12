@@ -29,7 +29,7 @@ from bot.keyboards import (
 )
 from db.models import get_session, Poster, User
 from db.crud import get_poster, update_poster_status, ModerationStatus, get_pending_posters_count, get_user_stats
-from utils.helpers import format_public_caption, format_moderation_caption
+from utils.helpers import format_public_caption, format_moderation_caption, send_long_message
 from config import config
 from datetime import datetime
 
@@ -165,11 +165,17 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                         moderator_id=moderator_id
                     )
                     
-                    # ✅ Send instruction message and store its ID
+                    # ✅ Send instruction message and get its ID.
+                    # NOTE: poster.caption is raw user HTML (may contain <a>/<b>),
+                    # so it MUST be escaped before embedding in our own HTML —
+                    # otherwise Telegram rejects the message with "can't parse
+                    # entities" or injects markup/links of the user's choosing
+                    # into the moderator's chat.
+                    safe_caption = html.escape(poster.caption or t("common.no_caption", language), quote=True)
                     instruction_text = (
                         f"{t('moderation.moderation_finalize.title', language)}"
                         f"{t('moderation.moderation_finalize.id', language, id=poster_id)}\n"
-                        f"{t('moderation.moderation_finalize.userlink', language, userlink=poster.caption)}\n\n"
+                        f"{t('moderation.moderation_finalize.userlink', language, userlink=safe_caption)}\n\n"
                         f"{t('moderation.moderation_finalize.description', language)}"
                         f"{t('moderation.moderation_finalize.footer', language)}\n\n"
                         f"💡 <i>Вы можете использовать HTML-форматирование: "
@@ -726,16 +732,21 @@ async def process_moderator_description(message: types.Message, state: FSMContex
     moderator_id = message.from_user.id
 
     # ✅ Get caption with HTML formatting if available
-    # Use HtmlDecoration.unparse for both captions and text messages
+    # Use HtmlDecoration.unparse for both captions and text messages.
+    # NOTE: custom-emoji entities (<tg-emoji emoji-id="...">😀</tg-emoji>) are
+    # stripped right here — bots cannot send that tag, and its ~30-char markup
+    # would otherwise inflate the stored caption against Telegram's 1024/4096
+    # character limits (the "too many chars" trouble when forwarding posts).
     from aiogram.utils.text_decorations import HtmlDecoration
+    from utils.html import _strip_tg_emoji
     html_decoration = HtmlDecoration()
-    
+
     if message.caption:
         # Photo/video/document with caption
-        final_caption = html_decoration.unparse(message.caption, message.caption_entities)
+        final_caption = _strip_tg_emoji(html_decoration.unparse(message.caption, message.caption_entities))
     elif message.text:
         # Plain text message (moderator typing in DM)
-        final_caption = html_decoration.unparse(message.text, message.entities)
+        final_caption = _strip_tg_emoji(html_decoration.unparse(message.text, message.entities))
     else:
         final_caption = ""
 
@@ -876,6 +887,25 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
         if config.debug_mode:
             final_caption += t("moderation.action.test_mode_caption", language)
 
+        # ---- "Too many chars" guard --------------------------------------
+        # Telegram photo captions are hard-capped at 1024 characters; before
+        # this was fixed, longer posts failed to publish with an opaque
+        # TOO_LONG API error. format_public_caption() trims defensively, but
+        # we also detect the situation here and keep the *full* text by
+        # sending the overflow as a separate text message (limit 4096,
+        # auto-split) right after the photo.
+        caption_overflow_text = ""
+        if plain_text_length(final_caption) > TG_CAPTION_LIMIT:
+            logger.warning(
+                f"Poster {poster_id}: caption is {plain_text_length(final_caption)} chars "
+                f"(limit {TG_CAPTION_LIMIT}) — splitting overflow into a text message"
+            )
+            full_body = data.get("final_caption") or ""
+            trimmed_len = plain_text_length(_trim_caption(full_body))
+            # The trimmed caption keeps the head of the body; send the tail.
+            if len(full_body) > trimmed_len:
+                caption_overflow_text = full_body[trimmed_len:].lstrip()
+
         # ✅ Check if this is a media group (album)
         photos_json = poster.photos_json or data.get("photos_json")
         
@@ -930,6 +960,20 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
                 caption=final_caption,
                 parse_mode="HTML"
             )
+
+        # If the caption didn't fit Telegram's 1024-char limit, publish the
+        # remaining text as a follow-up message so nothing is lost (each text
+        # message supports up to 4096 chars and is auto-split beyond that).
+        if caption_overflow_text:
+            try:
+                await send_long_message(
+                    callback.bot,
+                    chat_id=target_channel_id,
+                    text=caption_overflow_text,
+                    parse_mode="HTML",
+                )
+            except Exception as e:
+                logger.error(f"Could not send caption overflow text for poster {poster_id}: {e}")
         
         # Update database to APPROVED (final) - this will commit the caption change too!
         update_poster_status(
@@ -955,14 +999,18 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
                     f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
                 )
                 
-                # Get original caption and append status
+                # Get original caption and append status. The moderation photo
+                # caption is limited to 1024 chars — trim so the edit never
+                # fails with TOO_LONG (which previously left the message stuck
+                # with outdated status/buttons).
                 original_caption = poster.caption or "📨 New Poster Submission"
-                
+                updated_caption = _trim_caption(original_caption + final_status_text)
+
                 # Try to edit the original moderation message
                 await callback.bot.edit_message_caption(
                     chat_id=poster.moderation_chat_id,
                     message_id=poster.moderation_message_id,
-                    caption=original_caption + final_status_text,
+                    caption=updated_caption,
                     parse_mode="HTML",
                     reply_markup=None  # Remove buttons since it's approved
                 )

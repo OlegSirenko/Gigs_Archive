@@ -153,9 +153,11 @@ _TG_LINK_TAG_RE = re.compile(
     r'<a\b[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL
 )
 _TG_HTML_TAG_RE = re.compile(
-    r'</?\s*(?:a|u|s|strong|ins|del|span|pre|code|blockquote)\b[^>]*>',
+    r'</?\s*(?:a|u|s|strong|ins|del|span|pre|code|blockquote|tg-emoji|tg-spoiler|tg-time)\b[^>]*>',
     re.IGNORECASE,
 )
+# <tg-emoji emoji-id="...">😀</tg-emoji> — telegram custom emoji: keep inner char, drop wrapper
+_TG_EMOJI_TAG_RE = re.compile(r'<tg-emoji\b[^>]*>(.*?)</tg-emoji>', re.IGNORECASE | re.DOTALL)
 # теги <i>/<em> и <b> сохраняем как валидный HTML — сайт выделит их стилизацией
 _MD_LINK_RE = re.compile(r'\[([^ \]]*)\]\((?:https?://|tg://)[^)]*\)')
 _MD_LINK_FULL_RE = re.compile(r'\[([^\]]*)\]\(((?:https?://|tg://)[^)]*)\)')
@@ -295,6 +297,7 @@ def strip_telegram_markup(text: str | None) -> str:
     """
     if not text:
         return ""
+    text = _TG_EMOJI_TAG_RE.sub(lambda m: m.group(1), text)
     text = _TG_LINK_TAG_RE.sub(lambda m: m.group(1), text)
     text = _MD_LINK_RE.sub(lambda m: m.group(1), text)
     text = _TG_HTML_TAG_RE.sub("", text)

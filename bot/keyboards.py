@@ -121,10 +121,19 @@ def privacy_policy_keyboard(language: str):
 
 
 def privacy_acceptance_keyboard(language: str):
-    """Keyboard for users who haven't accepted privacy policy"""
+    """Keyboard for users who haven't accepted privacy policy.
+
+    Accept is mandatory to use the bot; Decline only offers account
+    deletion (the honest alternative), so a user can never be left
+    without an actionable choice - that ambiguity previously led some
+    users to simply ignore/skip the prompt.
+    """
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(text=f"{i18n.t('common.privacy_accept', language)}", callback_data="privacy:accept")
+    )
+    builder.row(
+        InlineKeyboardButton(text=f"{i18n.t('common.privacy_decline', language)}", callback_data="delete:confirm")
     )
     return builder
 

@@ -1,21 +1,30 @@
+# ===== Python bytecode (never track) =====
 __pycache__/
-
 *.pyc
+*.pyo
 
+# ===== Databases (shared + web-only) =====
 *.db
+posters_web.db
+articles.db
+poster_bot.db
 
-/posters_web.db
-
-
-.idea/*
-
+# ===== Secrets & credentials =====
 .env
+.web/.secret_key
+web/admin_passwords.json
+web/admins.json
 
+# ===== IDE / editor settings =====
+.vscode/
+.qwen/settings.json
+.idea/
+
+# ===== Server logs =====
 logs/
 *.log
 
+# ===== Static assets (uploads are dynamic) =====
 /web_static/uploads/*
 /web_static/img/watermarks/*
-
-web/admin_passwords.json
 

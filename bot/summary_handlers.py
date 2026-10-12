@@ -16,7 +16,7 @@ from aiogram.filters import Command
 from db.models import get_session, Poster
 from db.crud import get_posters_by_date_range, get_user
 from utils.i18n import i18n, t
-from utils.helpers import format_channel_post_link
+from utils.helpers import format_channel_post_link, first_line as get_first_line
 
 import html
 
@@ -30,25 +30,43 @@ RU_DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 # 🎯 Prime-time days: always show individually (Fri=4, Sat=5, Sun=6)
 PRIME_DAYS = [4, 5, 6]
 
+# ⚠️ Telegram hard limit for message text length
+TG_MESSAGE_LIMIT = 4096
+
 
 # =============================================================================
 # ✨ HELPER FUNCTIONS
 # =============================================================================
 
 def get_short_description(caption: str, max_length: int = 120, language: str = "ru") -> str:
-    """Extract a short, clean description from caption"""
-    if not caption:
-        return t("weekly_summary.no_description", language)
+    """Extract a short, clean title from caption.
 
-    # Remove URLs for cleaner preview
-    clean = re.sub(r'https?://[^\s]+', '', caption)
-    clean = ' '.join(clean.split())  # Normalize whitespace
+    Same rendering as the website cards: first non-empty line of the
+    description, stripped of emoji and any markup/links (see
+    ``utils.helpers.first_line``).
+    """
+    fallback = t("weekly_summary.no_description", language)
+    title = get_first_line(caption, fallback=fallback)
+    if len(title) > max_length:
+        title = title[:max_length].rstrip() + "…"
+    return title
 
-    # Truncate with word boundary
-    if len(clean) > max_length:
-        return clean[:max_length].rsplit(' ', 1)[0] + "..."
 
-    return clean.strip() or t("weekly_summary.no_description", language)
+def _render_poster_line(poster: Poster, language: str, max_length: int = 120) -> str:
+    """Render one poster bullet as a safe HTML line."""
+    link = format_channel_post_link(poster)
+    desc = get_short_description(poster.caption, max_length=max_length, language=language)
+
+    # ✅ ESCAPE USER CONTENT FOR SAFE HTML INSERTION
+    safe_desc = html.escape(desc, quote=True)
+
+    if link:
+        # Only https://t.me/... links are allowed into <a href>; anything else
+        # is rendered as plain text (prevents javascript:/data:/phishing links)
+        if link.startswith("https://t.me/"):
+            return f'• <a href="{html.escape(link, quote=True)}">{safe_desc}</a>'
+        return f"• {safe_desc}"
+    return f"• {safe_desc}"
 
 
 def _group_posters_by_date(posters: List[Poster]) -> Dict[date, List[Poster]]:
@@ -88,17 +106,7 @@ def _render_date_block(date_obj: date, posters: List[Poster], language: str = "r
     lines = ["", _format_date_header(date_obj)]
 
     for poster in posters:
-        link = format_channel_post_link(poster)
-        desc = get_short_description(poster.caption, language=language)
-
-        # ✅ ESCAPE USER CONTENT FOR SAFE HTML INSERTION
-        safe_desc = html.escape(desc, quote=True)
-        safe_link = html.escape(link, quote=True) if link else None
-
-        if safe_link:
-            lines.append(f"• <a href=\"{safe_link}\">{safe_desc}</a>")
-        else:
-            lines.append(f"• {safe_desc}")
+        lines.append(_render_poster_line(poster, language))
 
     return lines
 
@@ -148,16 +156,7 @@ def _build_manual_summary(
         
         if prime_date in posters_by_date:
             for poster in posters_by_date[prime_date]:
-                link = format_channel_post_link(poster)
-                desc = get_short_description(poster.caption)
-                
-                safe_desc = html.escape(desc, quote=True)
-                safe_link = html.escape(link, quote=True) if link else None
-            
-                if safe_link:
-                    lines.append(f"• <a href=\"{safe_link}\">{safe_desc}</a>")
-                else:
-                    lines.append(f"• {safe_desc}")
+                lines.append(_render_poster_line(poster, language))
         else:
             lines.append(t("weekly_summary.empty_day", language))
     
@@ -208,21 +207,39 @@ def format_auto_friday_summary(
             lines.append(f"🗓️ <b>{date_str} {day_name}</b>")
             
             for poster in posters_by_date[prime_date][:5]:  # Limit 5 per day
-                link = format_channel_post_link(poster)
-                desc = get_short_description(poster.caption, max_length=80)
-                
-                safe_desc = html.escape(desc, quote=True)
-                safe_link = html.escape(link, quote=True) if link else None
-                
-                if safe_link:
-                    lines.append(f"• <a href=\"{safe_link}\">{safe_desc}</a>")
-                else:
-                    lines.append(f"• {safe_desc}")
+                lines.append(_render_poster_line(poster, language, max_length=80))
     
     lines.append("")
     lines.append(t("subscription.friday_message.footer", language))
 
     return "\n".join(lines)
+
+
+def _split_into_messages(text: str, limit: int = TG_MESSAGE_LIMIT) -> List[str]:
+    """Split a summary into chunks that fit Telegram's message length limit.
+
+    Splits on line boundaries so HTML tags are never cut in the middle.
+    """
+    if len(text) <= limit:
+        return [text]
+
+    chunks: List[str] = []
+    current: List[str] = []
+    current_len = 0
+
+    for line in text.split("\n"):
+        line_len = len(line) + (1 if current else 0)
+        if current and current_len + line_len > limit:
+            chunks.append("\n".join(current))
+            current = [line]
+            current_len = len(line)
+        else:
+            current.append(line)
+            current_len += line_len
+
+    if current:
+        chunks.append("\n".join(current))
+    return chunks
 
 
 # =============================================================================
@@ -232,7 +249,10 @@ def format_auto_friday_summary(
 @summary_router.message(Command("summary"))
 async def cmd_summary(message: types.Message):
     """📊 Show weekly summary with prime-time highlighting"""
-    
+
+    if not message.from_user:  # defensive: anonymous channel posts have no sender
+        return
+
     language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
     
     # 📅 Calculate week boundaries (Mon–Sun)
@@ -268,13 +288,14 @@ async def cmd_summary(message: types.Message):
         language=language
     )
     
-    # 📤 Send to user
-    await message.answer(
-        summary_text,
-        parse_mode="HTML",
-        disable_web_page_preview=False
-    )
-    
+    # 📤 Send to user (split into chunks if it exceeds Telegram's limit)
+    for chunk in _split_into_messages(summary_text):
+        await message.answer(
+            chunk,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+
     logger.info(f"📊 Weekly summary requested by user {message.from_user.id}")
 
 
@@ -349,7 +370,7 @@ async def send_friday_summary_to_users(bot, config):
     # 👥 Get subscribed users
     with get_session() as session:
         from db.models import User
-        subscribed = session.query(User).filter(User.subscribe_weekly == True).all()
+        subscribed = session.query(User).filter(User.subscribe_weekly.is_(True)).all()
     
     if not subscribed:
         logger.info("👥 No users subscribed to Friday summaries")
@@ -369,12 +390,13 @@ async def send_friday_summary_to_users(bot, config):
                 language=user_language
             )
             
-            await bot.send_message(
-                chat_id=user.telegram_id,
-                text=summary_text,
-                parse_mode="HTML",
-                disable_web_page_preview=False
-            )
+            for chunk in _split_into_messages(summary_text):
+                await bot.send_message(
+                    chat_id=user.telegram_id,
+                    text=chunk,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
             sent_count += 1
             
             # Small delay to avoid rate limits

@@ -234,7 +234,11 @@ def format_moderation_caption(data: Dict, poster_id: int, language: str = "ru") 
         f"{t('moderation.preview.anonymous', language, anonymous=t('common.yes' if is_anon else 'common.no', language))}\n"
         f"{t('moderation.preview.event_date', language, date=date_formatted)}\n\n"
         f"{t('moderation.preview.original_caption', language)}\n"
-        f"{data.get('caption', t('moderation.preview.no_description', language))}"
+        # Moderation chat shows the submission as a *photo caption* (1024-char
+        # hard limit). The user's caption was validated against 874 chars, but
+        # this header adds ~150 more — trim defensively so the API never
+        # rejects the moderation post with an opaque "TOO_LONG".
+        f"{_trim_caption(data.get('caption') or t('moderation.preview.no_description', language))}"
     )
 
 
@@ -322,12 +326,107 @@ def format_public_caption(data: dict, user_info: dict | None = None, language: s
     # Combine all parts
     result = f"{author_line}{date_line}\n{caption}"
 
-    return result.strip()
+    # Final safety net: Telegram rejects photo captions longer than 1024 chars
+    # with an opaque "TOO_LONG" API error. The user caption was validated
+    # against a smaller effective limit, but attribution/source links appended
+    # here could still push it over — trim defensively instead of failing.
+    return _trim_caption(result.strip())
 
 
 # Telegram photo caption hard limit (in characters). Captions longer than this
 # are rejected by the Bot API with error "TOO_LONG".
 TG_CAPTION_LIMIT = 1024
+
+# Hard limit for a plain text message sent by a bot (Telegram Bot API):
+# 4,096 UTF-8 characters. Longer texts must be split into several messages.
+TG_TEXT_LIMIT = 4096
+
+# Safety margin so attribution/links appended after validation still fit.
+TG_CAPTION_SAFETY_MARGIN = 150
+
+# Effective limit used when validating user captions: the real API limit minus
+# the safety margin (author line, date line, source link etc. are added later).
+TG_CAPTION_EFFECTIVE_LIMIT = TG_CAPTION_LIMIT - TG_CAPTION_SAFETY_MARGIN
+
+
+def split_message(text: str, limit: int = TG_TEXT_LIMIT) -> list[str]:
+    """Split a long text into chunks that each fit within ``limit`` characters.
+
+    Tries to keep HTML formatting valid across chunk boundaries: any tags that
+    are opened inside a chunk but not closed there are closed at the end of the
+    chunk and re-opened at the start of the next one. Chunks are broken at
+    paragraph or word boundaries whenever possible.
+    """
+    if not text:
+        return []
+    if len(text) <= limit:
+        return [text]
+
+    tag_re = re.compile(r"<(/?)(b|i|u|s|a|code|pre|blockquote)(\s[^>]*)?>", re.IGNORECASE)
+
+    def _visible_len(s: str) -> int:
+        return len(tag_re.sub("", s))
+
+    def _open_tags(s: str) -> list[str]:
+        """Return stack of currently-open simple tags after scanning ``s``."""
+        stack: list[str] = []
+        for m in tag_re.finditer(s):
+            closing, name = m.group(1) == "/", m.group(2).lower()
+            if closing:
+                # pop matching tag (tolerate stray closers)
+                for i in range(len(stack) - 1, -1, -1):
+                    if stack[i].startswith(f"</{name}") is False and stack[i][1:].split(" ")[0].rstrip(">") == name:
+                        del stack[i]
+                        break
+            else:
+                stack.append(m.group(0))
+        return stack
+
+    chunks: list[str] = []
+    remaining = text
+    while remaining:
+        if _visible_len(remaining) <= limit:
+            piece, remaining = remaining, ""
+        else:
+            # Walk char-by-char until visible length hits the limit.
+            cut = 0
+            visible = 0
+            i = 0
+            n = len(remaining)
+            while i < n:
+                m = tag_re.match(remaining, i)
+                if m:
+                    cut = m.end()
+                    i = m.end()
+                    continue
+                visible += 1
+                if visible > limit - 10:  # leave room to close open tags
+                    break
+                i += 1
+            cut = i if i else cut
+
+            # Prefer a paragraph / word boundary near the cut.
+            head = remaining[:cut]
+            for sep in ("\n\n", "\n", " "):
+                boundary = head.rfind(sep)
+                if boundary > cut * 0.5:
+                    cut = boundary + (len(sep) if sep != " " else 0)
+                    break
+
+            piece, remaining = remaining[:cut], remaining[cut:]
+
+            # Keep HTML balanced across the boundary.
+            opens = _open_tags(piece)
+            closes = "".join(f"</{m.group(2).lower()}>" for m in
+                             (re.finditer(r"<(b|i|u|s|a|code|pre|blockquote)(\s[^>]*)?>", p, re.IGNORECASE)
+                              for p in opens))
+            if closes:
+                piece += closes
+                remaining = closes.replace("</", "<") + remaining
+
+        chunks.append(piece.strip())
+
+    return [c for c in chunks if c]
 
 
 def plain_text_length(html_text: str) -> int:
@@ -368,15 +467,18 @@ def validate_caption(caption: str, language: str = "ru") -> tuple[bool, str]:
         )
 
     # ---- Too long ("too many chars") -------------------------------------
+    # Validate against the *effective* limit (1024 minus a safety margin),
+    # because author line / date / source link are appended later in the flow
+    # and would otherwise push the final caption over the API limit.
     actual_len = plain_text_length(stripped)
-    if actual_len > TG_CAPTION_LIMIT:
+    if actual_len > TG_CAPTION_EFFECTIVE_LIMIT:
         return False, (
             t(
                 "poster_flow.validation_error.too_long",
                 language,
                 current=actual_len,
-                limit=TG_CAPTION_LIMIT,
-                excess=actual_len - TG_CAPTION_LIMIT,
+                limit=TG_CAPTION_EFFECTIVE_LIMIT,
+                excess=actual_len - TG_CAPTION_EFFECTIVE_LIMIT,
             )
             + "\n\n"
             + t("poster_flow.validation_error.too_long_hint", language)
@@ -433,6 +535,85 @@ def describe_telegram_error(error: Exception, language: str = "ru") -> str:
     if status_code:
         return f"{generic}\n\n<code>HTTP {status_code}: {html.escape(raw[:200])}</code>"
     return f"{generic}\n\n<code>{html.escape(raw[:200])}</code>"
+
+
+def _trim_caption(caption: str, limit: int = TG_CAPTION_LIMIT) -> str:
+    """Trim an HTML caption so its *visible* length fits Telegram's 1024-char
+    photo-caption limit. Cuts at paragraph/word boundaries and re-balances any
+    HTML tag left open by the cut, so the result is always valid HTML."""
+    if not caption or plain_text_length(caption) <= limit:
+        return caption
+
+    tag_re = re.compile(r"<(/?)(b|i|u|s|a|code|pre|blockquote)(\s[^>]*)?>", re.IGNORECASE)
+    cut = 0
+    visible = 0
+    i = 0
+    n = len(caption)
+    while i < n:
+        m = tag_re.match(caption, i)
+        if m:
+            i = m.end()
+            continue
+        visible += 1
+        if visible > limit - 30:  # room for ellipsis + closing tags
+            break
+        i += 1
+    trimmed = caption[:i]
+
+    # Prefer a cleaner boundary near the end.
+    for sep in ("\n\n", "\n", " "):
+        b = trimmed.rfind(sep)
+        if b > len(trimmed) * 0.7:
+            trimmed = trimmed[:b]
+            break
+
+    # Close any tags left open by the cut (simple LIFO over known tags).
+    opens: list[str] = []
+    for m in tag_re.finditer(trimmed):
+        if m.group(1) == "/":
+            for j in range(len(opens) - 1, -1, -1):
+                if tag_re.fullmatch(opens[j]).group(2).lower() == m.group(2).lower():
+                    del opens[j]
+                    break
+        else:
+            opens.append(m.group(0))
+    closers = "".join(f"</{tag_re.fullmatch(p).group(2).lower()}>" for p in reversed(opens))
+
+    return trimmed.rstrip() + "…" + closers
+
+
+async def send_long_message(
+    bot,
+    chat_id: int,
+    text: str,
+    parse_mode: str = "HTML",
+    reply_markup=None,
+    disable_web_page_preview: bool = True,
+):
+    """Send a text message, automatically splitting it into several messages if
+    it exceeds Telegram's 4096-character limit (the Bot API rejects longer
+    texts with HTTP 400 'TOO_LONG').
+
+    Returns the first sent Message (or None when the text was empty).
+    Only the last chunk carries the reply keyboard.
+    """
+    if not text:
+        return None
+    chunks = split_message(text, TG_TEXT_LIMIT)
+    first = None
+    for idx, chunk in enumerate(chunks):
+        sent = await bot.send_message(
+            chat_id=chat_id,
+            text=chunk,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup if idx == len(chunks) - 1 else None,
+            disable_web_page_preview=disable_web_page_preview,
+        )
+        if first is None:
+            first = sent
+    if len(chunks) > 1:
+        logger.info(f"Split long message ({len(text)} chars) into {len(chunks)} parts for chat {chat_id}")
+    return first
 
 
 def extract_forwarded_info(message: Message) -> dict:

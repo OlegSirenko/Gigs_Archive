@@ -67,11 +67,14 @@ def create_poster(
         status=ModerationStatus.PENDING
     )
     session.add(poster)
-    session.refresh(poster)
+    # Note: poster.id is assigned by DB on commit; access poster later after commit_poster()
     return poster
 
 def commit_poster(session: Session, poster: Poster) -> Poster:
-    """Commit a pending poster to the database after external operations succeed."""
+    """Commit a pending poster to the database after external operations succeed.
+    Assigns the DB auto-increment ID to the returned object."""
+    session.flush()   # assign primary key without committing transaction
+    session.refresh(poster)
     session.commit()
     session.refresh(poster)
     return poster

@@ -131,32 +131,50 @@ async def safe_edit_keyboard(bot, chat_id: int, message, keyboard):
 async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMContext):
     """Process moderator approve/decline decision"""
     
-    # DEBUG: Log when handler is called
-    logger.debug(f"MODERATION HANDLER CALLED with data: {callback.data}")
+    # Comprehensive logging for debugging
+    logger.info(f"=== MODERATION CALLBACK RECEIVED ===")
+    logger.info(f"Callback data: {callback.data}")
+    logger.info(f"Callback type: {type(callback)}")
+    logger.info(f"Callback message ID: {callback.message.message_id if callback.message else 'No message'}")
+    logger.info(f"Callback from user ID: {callback.from_user.id}")
+    logger.info(f"Callback from user name: {callback.from_user.full_name if hasattr(callback.from_user, 'full_name') else 'N/A'}")
+    logger.info(f"Callback chat ID: {callback.message.chat.id if callback.message else 'No chat'}")
     
+    # Parse callback data
+    try:
+        action, user_id_str, anon_flag, poster_id_str = callback.data.split(":")
+        logger.info(f"Parsed callback components - Action: {action}, User ID: {user_id_str}, Anon Flag: {anon_flag}, Poster ID: {poster_id_str}")
+    except Exception as e:
+        logger.error(f"Failed to parse callback data: {e}")
+        await callback.answer("⚠️ Invalid callback data", show_alert=True)
+        return
+
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
 
     if callback.from_user.id not in config.admin_ids:
+        logger.warning(f"Unauthorized access attempt from user {callback.from_user.id}")
         await callback.answer(t("common.not_authorized", language), show_alert=True)
         return
 
     try:
-        # Simple parsing - let the filter handle validation
-        action, user_id_str, anon_flag, poster_id_str = callback.data.split(":")
         user_id = int(user_id_str)
         poster_id = int(poster_id_str)
         moderator_id = callback.from_user.id
         moderator_username = callback.from_user.username or "no_username"
 
+        logger.info(f"Processing moderation decision: {action} for poster {poster_id} from user {user_id}")
+
         with get_session() as session:
             poster = get_poster(session, poster_id)
 
             if not poster:
+                logger.warning(f"Poster {poster_id} not found in database")
                 await callback.answer(t("common.not_found", language), show_alert=True)
                 return
 
             # Process approve/decline actions
             if action == "approve":
+                logger.info(f"Handling APPROVE for poster {poster_id}")
                 # Check status first
                 if poster.status != ModerationStatus.PENDING:
                     status_messages = {
@@ -165,6 +183,7 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                         ModerationStatus.DECLINED: t("moderation.action.already_declined", language),
                     }
                     error_msg = status_messages.get(poster.status, t("moderation.action.already_processed", language))
+                    logger.info(f"Cannot approve - poster already processed: {poster.status}")
                     await callback.answer(error_msg, show_alert=True)
                     return
 
@@ -188,14 +207,19 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                     f"<i>{t('moderation.status.pending_final_hint', language)}</i>"
                 )
 
+                logger.info(f"Editing moderation message with status text for poster {poster_id}")
                 await safe_edit_moderation_message(callback.bot, callback.message.chat.id, callback.message, status_text)
+                logger.info(f"Successfully edited moderation message for poster {poster_id}")
 
             elif action == "decline":
+                logger.info(f"Handling DECLINE for poster {poster_id}")
                 # Show decline reason keyboard (stateless)
                 keyboard = decline_reason_keyboard(user_id, anon_flag, poster_id, language)
 
+                logger.info(f"Attempting to edit message with decline keyboard for poster {poster_id}")
                 if not await safe_edit_keyboard(callback.bot, callback.message.chat.id, callback.message, keyboard):
                     # If message is inaccessible, send decline as new message
+                    logger.warning(f"Could not edit message keyboard for poster {poster_id}, sending new message")
                     await callback.bot.send_message(
                         chat_id=callback.message.chat.id,
                         text=t("moderation.action.decline_selected", language),
@@ -203,11 +227,12 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                     )
 
                 await callback.answer(t("moderation.action.decline_selected", language), show_alert=False)
+                logger.info(f"Successfully handled decline for poster {poster_id}")
 
             logger.info(f"Moderation {action} for poster {poster_id} by @{moderator_username}")
 
     except Exception as e:
-        logger.error(f"Moderation error: {e}")
+        logger.error(f"Moderation error: {e}", exc_info=True)
         await callback.answer(t("common.error", language), show_alert=True)
         raise
 

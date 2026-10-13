@@ -53,13 +53,13 @@ async def safe_edit_moderation_message(bot, chat_id: int, message, status_text: 
             await message.edit_caption(
                 caption=(message.caption or "") + status_text,
                 parse_mode="HTML",
-                reply_markup=None
+                reply_markup=message.reply_markup
             )
         else:
             await message.edit_text(
                 text=(message.text or "") + status_text,
                 parse_mode="HTML",
-                reply_markup=None
+                reply_markup=message.reply_markup
             )
         return True
     except TelegramBadRequest as e:

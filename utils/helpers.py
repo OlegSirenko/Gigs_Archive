@@ -338,14 +338,15 @@ def format_public_caption(data: dict, user_info: dict | None = None, language: s
 
 # Telegram photo caption hard limit (in characters). Captions longer than this
 # are rejected by the Bot API with error "TOO_LONG".
-TG_CAPTION_LIMIT = 1024
+# Updated Oct 2026: Telegram increased the limit from 1024 → 4096.
+TG_CAPTION_LIMIT = 4096
 
 # Hard limit for a plain text message sent by a bot (Telegram Bot API):
 # 4,096 UTF-8 characters. Longer texts must be split into several messages.
 TG_TEXT_LIMIT = 4096
 
 # Safety margin so attribution/links appended after validation still fit.
-TG_CAPTION_SAFETY_MARGIN = 150
+TG_CAPTION_SAFETY_MARGIN = 500
 
 # Effective limit used when validating user captions: the real API limit minus
 # the safety margin (author line, date line, source link etc. are added later).

@@ -134,6 +134,19 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
     # Log the callback data for debugging
     logger.debug(f"Received callback data: {callback.data}")
     
+    # Validate callback data format
+    if not callback.data:
+        logger.warning("Empty callback data received")
+        await callback.answer("⚠️ Invalid request", show_alert=True)
+        return
+        
+    try:
+        action, user_id_str, anon_flag, poster_id_str = callback.data.split(":")
+    except ValueError:
+        logger.warning(f"Malformed callback data: {callback.data}")
+        await callback.answer("⚠️ Invalid request", show_alert=True)
+        return
+
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
 
     if callback.from_user.id not in config.admin_ids:
@@ -141,7 +154,6 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
         return
 
     try:
-        action, user_id_str, anon_flag, poster_id_str = callback.data.split(":")
         user_id = int(user_id_str)
         poster_id = int(poster_id_str)
         moderator_id = callback.from_user.id

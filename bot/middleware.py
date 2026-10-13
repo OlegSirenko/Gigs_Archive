@@ -75,6 +75,20 @@ class PrivacyPolicyMiddleware(BaseMiddleware):
         if not getattr(real_event, "from_user", None):
             return await handler(event, data)
 
+        # ⚠️ Skip privacy check for forwarded messages.
+        # We only want to enforce privacy policy when a user interacts directly
+        # with the bot in DMs. Messages forwarded from external channels/groups
+        # should pass through freely to be processed by the poster flow.
+        if getattr(real_event, 'forward_from_chat', None):
+            return await handler(event, data)
+
+        # ⚠️ Skip privacy check for non-private chats (groups/supergroups).
+        # Privacy acceptance is required only for DM interactions. Group messages
+        # (especially forwarded ones) bypass the policy gate entirely.
+        chat_type = getattr(real_event.chat, 'type', None)
+        if chat_type != 'private':
+            return await handler(event, data)
+
         # Skip for moderators/admins - they don't need privacy acceptance
         if real_event.from_user.id in config.admin_ids:
             return await handler(event, data)

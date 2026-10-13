@@ -141,9 +141,15 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
         return
         
     try:
-        action, user_id_str, anon_flag, poster_id_str = callback.data.split(":")
-    except ValueError:
-        logger.warning(f"Malformed callback data: {callback.data}")
+        parts = callback.data.split(":")
+        if len(parts) != 4:
+            logger.warning(f"Malformed callback data (wrong parts count): {callback.data}")
+            await callback.answer("⚠️ Invalid request", show_alert=True)
+            return
+            
+        action, user_id_str, anon_flag, poster_id_str = parts
+    except ValueError as e:
+        logger.warning(f"Malformed callback data: {callback.data} - Error: {e}")
         await callback.answer("⚠️ Invalid request", show_alert=True)
         return
 
@@ -153,6 +159,9 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
         await callback.answer(t("common.not_authorized", language), show_alert=True)
         return
 
+    # Add explicit logging to track if we enter this handler
+    logger.info(f"Processing moderation decision: {action} for poster {poster_id_str} from user {callback.from_user.id}")
+    
     try:
         user_id = int(user_id_str)
         poster_id = int(poster_id_str)

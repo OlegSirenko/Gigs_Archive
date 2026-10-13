@@ -735,19 +735,17 @@ async def process_moderator_description(message: types.Message, state: FSMContex
     # ✅ Get caption with HTML formatting if available
     # Use HtmlDecoration.unparse for both captions and text messages.
     # NOTE: custom-emoji entities (<tg-emoji emoji-id="...">😀</tg-emoji>) are
-    # stripped right here — bots cannot send that tag, and its ~30-char markup
-    # would otherwise inflate the stored caption against Telegram's 1024/4096
-    # character limits (the "too many chars" trouble when forwarding posts).
+    # PRESERVED — they must be kept so Premium emojis render correctly in channels.
+    # Length validation uses plain_text_length() which strips tags before counting.
     from aiogram.utils.text_decorations import HtmlDecoration
-    from utils.html import _strip_tg_emoji
     html_decoration = HtmlDecoration()
 
     if message.caption:
-        # Photo/video/document with caption
-        final_caption = _strip_tg_emoji(html_decoration.unparse(message.caption, message.caption_entities))
+        # Photo/video/document with caption → preserve <tg-emoji> tags as-is
+        final_caption = html_decoration.unparse(message.caption, message.caption_entities)
     elif message.text:
-        # Plain text message (moderator typing in DM)
-        final_caption = _strip_tg_emoji(html_decoration.unparse(message.text, message.entities))
+        # Plain text message (moderator typing in DM) → same treatment
+        final_caption = html_decoration.unparse(message.text, message.entities)
     else:
         final_caption = ""
 

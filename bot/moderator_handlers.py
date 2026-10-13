@@ -567,71 +567,19 @@ async def start_editing(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer()
 
 
-
-@moderator_edit_router.callback_query(F.data.startswith("moderator:start_edit:"))
-async def start_editing(callback: types.CallbackQuery, state: FSMContext):
-    """Handle 'Start Editing' button - sets FSM state in DM context"""
-
-    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
-    poster_id = int(callback.data.split(":")[2])
-
-    with get_session() as session:
-        poster = get_poster(session, poster_id)
-        if not poster:
-            await callback.answer(t("common.not_found", language), show_alert=True)
-            return
-
-        # ✅ SET FSM STATE HERE (in DM context!)
-        await state.set_state(ModeratorEdit.waiting_for_description)
-        await state.update_data(
-            poster_id=poster_id,
-            user_id=poster.user_id,
-            is_anonymous=poster.is_anonymous,
-            photo_file_id=poster.photo_file_id,
-            original_caption=poster.caption,  # Store for display/cancel
-            event_date=poster.event_date.isoformat() if poster.event_date else None,
-            first_name=poster.user.first_name if poster.user else None,
-            username=poster.user.username if poster.user else None,
-        )
-
-        # ✅ Escape original caption for safe display in <code> block
-        import html
-        safe_original = html.escape(poster.caption or t("common.no_caption", language), quote=True)
-        
-        # ✅ Build keyboard with Cancel button
-        cancel_builder = InlineKeyboardBuilder()
-        cancel_builder.row(
-            InlineKeyboardButton(
-                text=t("keyboards.moderator.cancel_editing", language),
-                callback_data=f"moderator:cancel_edit:{poster_id}"
-            )
-        )
-
-        # ✅ EDIT instruction message to show input prompt + original caption
-        await callback.message.edit_text(
-            f"{t('moderation.start_editing.title', language)}\n\n"
-            f"{t('moderation.start_editing.description', language)}\n\n"
-            f"{t('moderation.start_editing.original_label', language)}\n"
-            f"<code>{safe_original}</code>",  # ← Copiable original caption
-            parse_mode="HTML",
-            reply_markup=cancel_builder.as_markup()
-        )
-        
-        await callback.answer()
-
 @moderator_edit_router.callback_query(F.data.startswith("moderator:skip:"))
 async def skip_description(callback: types.CallbackQuery, state: FSMContext):
     """Handle skip button - FIRST response in DM (sets FSM state)"""
-    
+
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     poster_id = int(callback.data.split(":")[2])
-    
+
     with get_session() as session:
         poster = get_poster(session, poster_id)
         if not poster:
             await callback.answer(t("common.not_found", language), show_alert=True)
             return
-        
+
         # ✅ SET FSM STATE HERE (in DM context!)
         await state.set_state(ModeratorEdit.waiting_for_confirmation)
         await state.update_data(

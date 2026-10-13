@@ -30,7 +30,7 @@ from bot.keyboards import (
 )
 from db.models import get_session, Poster, User
 from db.crud import get_poster, update_poster_status, ModerationStatus, get_pending_posters_count, get_user_stats
-from utils.helpers import format_public_caption, format_moderation_caption, send_long_message
+from utils.helpers import format_public_caption, format_moderation_caption, send_long_message, plain_text_length
 from config import config
 from datetime import datetime
 

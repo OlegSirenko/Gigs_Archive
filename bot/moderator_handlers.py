@@ -8,6 +8,7 @@ import re
 import asyncio
 import logging
 import json
+import html
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command

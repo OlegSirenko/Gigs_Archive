@@ -53,13 +53,13 @@ async def safe_edit_moderation_message(bot, chat_id: int, message, status_text: 
             await message.edit_caption(
                 caption=(message.caption or "") + status_text,
                 parse_mode="HTML",
-                reply_markup=message.reply_markup  # <- THIS WAS THE FIX: preserve the keyboard
+                reply_markup=message.reply_markup  # <- PRESERVE THE KEYBOARD
             )
         else:
             await message.edit_text(
                 text=(message.text or "") + status_text,
                 parse_mode="HTML",
-                reply_markup=message.reply_markup  # <- THIS WAS THE FIX: preserve the keyboard
+                reply_markup=message.reply_markup  # <- PRESERVE THE KEYBOARD
             )
         return True
     except TelegramBadRequest as e:
@@ -131,8 +131,8 @@ async def safe_edit_keyboard(bot, chat_id: int, message, keyboard):
 async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMContext):
     """Process moderator approve/decline decision"""
     
-    # Log for debugging - this should show when the handler is actually called
-    logger.debug(f"DEBUG: handle_moderation_decision called with data: {callback.data}")
+    # DEBUG: Log when handler is called
+    logger.debug(f"MODERATION HANDLER CALLED with data: {callback.data}")
     
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
 
@@ -141,7 +141,7 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
         return
 
     try:
-        # Direct parsing without complex validation - let the filter handle it
+        # Simple parsing - let the filter handle validation
         action, user_id_str, anon_flag, poster_id_str = callback.data.split(":")
         user_id = int(user_id_str)
         poster_id = int(poster_id_str)
@@ -155,13 +155,10 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                 await callback.answer(t("common.not_found", language), show_alert=True)
                 return
 
-            # bot/moderator_handlers.py - In handle_moderation_decision, approve section
-
+            # Process approve/decline actions
             if action == "approve":
-                # ✅ IDEMPOTENCY CHECK: Prevent duplicate processing
-                # NOTE: poster.status is Enum object, not string!
+                # Check status first
                 if poster.status != ModerationStatus.PENDING:
-                    # Show status-specific message
                     status_messages = {
                         ModerationStatus.PENDING_FINAL: t("moderation.action.already_in_progress", language),
                         ModerationStatus.APPROVED: t("moderation.action.already_approved", language),
@@ -171,9 +168,6 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                     await callback.answer(error_msg, show_alert=True)
                     return
 
-                # ✅ EARLY CALLBACK ANSWER: Acknowledge immediately
-                await callback.answer(t("moderation.action.sent_to_dm", language), show_alert=False)
-
                 # Update DB to PENDING_FINAL
                 update_poster_status(
                     session=session,
@@ -182,63 +176,10 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
                     moderator_id=moderator_id
                 )
 
-                # ✅ Send instruction message and get its ID.
-                # NOTE: poster.caption is raw user HTML (may contain <a>/<b>),
-                # so it MUST be escaped before embedding in our own HTML —
-                # otherwise Telegram rejects the message with "can't parse
-                # entities" or injects markup/links of the user's choosing
-                # into the moderator's chat.
-                safe_caption = html.escape(poster.caption or t("common.no_caption", language), quote=True)
-                instruction_text = (
-                    f"{t('moderation.moderation_finalize.title', language)}"
-                    f"{t('moderation.moderation_finalize.id', language, id=poster_id)}\n"
-                    f"{t('moderation.moderation_finalize.userlink', language, userlink=safe_caption)}\n\n"
-                    f"{t('moderation.moderation_finalize.description', language)}"
-                    f"{t('moderation.moderation_finalize.footer', language)}\n\n"
-                    f"💡 <i>Вы можете использовать HTML-форматирование: "
-                    f"&lt;a href=\"https://example.com\"&gt;ссылка&lt;/a&gt;, "
-                    f"&lt;b&gt;жирный&lt;/b&gt;, "
-                    f"&lt;i&gt;курсив&lt;/i&gt;, "
-                    f"&lt;code&gt;код&lt;/code&gt;</i>"
-                )
+                # Answer immediately
+                await callback.answer(t("moderation.action.sent_to_dm", language), show_alert=False)
 
-                skip_builder = InlineKeyboardBuilder()
-                skip_builder.row(
-                    InlineKeyboardButton(
-                        text=t("keyboards.moderator.start_editing", language),
-                        callback_data=f"moderator:start_edit:{poster_id}"
-                    )
-                )
-                skip_builder.row(
-                    InlineKeyboardButton(
-                        text=t("keyboards.moderator.skip", language),
-                        callback_data=f"moderator:skip:{poster_id}"
-                    )
-                )
-
-                # ✅ Send instruction message and get its ID
-                instruction_message = await callback.bot.send_message(
-                    chat_id=moderator_id,
-                    text=instruction_text,
-                    parse_mode="HTML",
-                    reply_markup=skip_builder.as_markup()
-                )
-
-                # ✅ Store instruction message info in FSM state (WITHOUT setting active state)
-                await state.update_data(
-                    poster_id=poster_id,
-                    user_id=poster.user_id,
-                    is_anonymous=poster.is_anonymous,
-                    photo_file_id=poster.photo_file_id,
-                    original_caption=poster.caption,
-                    event_date=poster.event_date.isoformat() if poster.event_date else None,
-                    first_name=poster.user.first_name if poster.user else None,
-                    username=poster.user.username if poster.user else None,
-                    instruction_message_id=instruction_message.message_id,  # ← STORE THIS
-                    instruction_chat_id=moderator_id,  # ← STORE THIS
-                )
-
-                # Edit moderation message (same as before)
+                # Edit moderation message with status
                 status_text = (
                     f"\n\n━━━━━━━━━━━━━━━━━━━━\n"
                     f"{t('moderation.status.pending_final', language)}\n"
@@ -268,7 +209,6 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
     except Exception as e:
         logger.error(f"Moderation error: {e}")
         await callback.answer(t("common.error", language), show_alert=True)
-        # Re-raise to ensure the error is logged properly
         raise
 
 

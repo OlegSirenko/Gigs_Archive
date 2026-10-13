@@ -681,25 +681,32 @@ async def cancel_during_editing(callback: types.CallbackQuery, state: FSMContext
             moderator_id=None
         )
         
-        # ✅ Restore original keyboard on the moderation message
+        # ✅ Restore original keyboard AND clean caption on the moderation message
         try:
             if poster.moderation_message_id and poster.moderation_chat_id:
                 from bot.keyboards import moderation_keyboard
-                
+
                 keyboard = moderation_keyboard(
                     user_id=poster.user_id,
                     is_anonymous=poster.is_anonymous,
                     poster_id=poster.id,
                     language=language
                 ).as_markup()
-                
-                await callback.bot.edit_message_reply_markup(
+
+                # Rebuild the raw user caption without any status suffix
+                # (the "PENDING FINAL" block that was appended after approve).
+                current_caption = poster.caption or ""
+                clean_caption = re.sub(r"\n\n━━━━━━━━━━━━━━━━━━━━.*", "", current_caption, flags=re.DOTALL)
+
+                # Restore keyboard + strip status text simultaneously
+                await callback.bot.edit_message_caption(
                     chat_id=poster.moderation_chat_id,
                     message_id=poster.moderation_message_id,
+                    caption=clean_caption,
                     reply_markup=keyboard
                 )
-                
-                # Optional: notify moderation chat
+
+                # Notify moderation chat
                 await callback.bot.send_message(
                     chat_id=config.moderation_chat_id,
                     text=t(
@@ -983,13 +990,12 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
             channel_message_id=sent_message.message_id,
             channel_chat_id=target_channel_id
         )
-        
-        # ✅ UPDATE THE ORIGINAL MODERATION MESSAGE
+
+        # ✅ UPDATE THE ORIGINAL MODERATION MESSAGE with approval status & channel link
         if poster.moderation_message_id and poster.moderation_chat_id:
             try:
-                # Build the final status text
                 channel_link = f"https://t.me/c/{str(target_channel_id)[4:]}/{sent_message.message_id}" if str(target_channel_id).startswith("-100") else f"https://t.me/{target_channel_id}/{sent_message.message_id}"
-                
+
                 final_status_text = (
                     f"\n\n━━━━━━━━━━━━━━━━━━━━\n"
                     f"{t('moderation.status.approved', language)}\n"
@@ -997,25 +1003,19 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
                     f"{t('moderation.action.published_channel', language, channel_link=channel_link)}\n"
                     f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}"
                 )
-                
-                # Get original caption and append status. The moderation photo
-                # caption is limited to 1024 chars — trim so the edit never
-                # fails with TOO_LONG (which previously left the message stuck
-                # with outdated status/buttons).
+
                 original_caption = poster.caption or "📨 New Poster Submission"
                 updated_caption = _trim_caption(original_caption + final_status_text)
 
-                # Try to edit the original moderation message
                 await callback.bot.edit_message_caption(
                     chat_id=poster.moderation_chat_id,
                     message_id=poster.moderation_message_id,
                     caption=updated_caption,
                     parse_mode="HTML",
-                    reply_markup=None  # Remove buttons since it's approved
+                    reply_markup=None
                 )
             except Exception as e:
                 logger.error(f"Could not update moderation message for poster {poster_id}: {e}")
-                # Fallback: send a new message with the status
                 try:
                     await callback.bot.send_message(
                         chat_id=config.moderation_chat_id,
@@ -1028,7 +1028,7 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
                     )
                 except:
                     pass
-    
+
     # Notify moderator in DM
     await callback.message.edit_text(
         t("moderation.action.published_success", language, poster_id=poster_id),
@@ -1094,26 +1094,31 @@ async def final_cancel(callback: types.CallbackQuery, state: FSMContext):
             status=ModerationStatus.PENDING.value
         )
         
-        # ✅ Restore original keyboard on the moderation message
+        # ✅ Restore original keyboard AND clean caption on the moderation message
         try:
             if poster.moderation_message_id and poster.moderation_chat_id:
                 from bot.keyboards import moderation_keyboard
-                
+
                 keyboard = moderation_keyboard(
                     user_id=poster.user_id,
                     is_anonymous=poster.is_anonymous,
                     poster_id=poster.id,
                     language=language
                 ).as_markup()
-                
-                # ✅ Restore keyboard on original message
-                await callback.bot.edit_message_reply_markup(
+
+                # Strip any status suffix (e.g. "Pending Final Review" block) before restoring
+                current_caption = poster.caption or ""
+                clean_caption = re.sub(r"\n\n━━━━━━━━━━━━━━━━━━━━.*", "", current_caption, flags=re.DOTALL)
+
+                # Restore keyboard + strip status text simultaneously
+                await callback.bot.edit_message_caption(
                     chat_id=poster.moderation_chat_id,
                     message_id=poster.moderation_message_id,
+                    caption=clean_caption,
                     reply_markup=keyboard
                 )
-                
-                # ✅ Send small notification (optional)
+
+                # Send notification to moderation chat
                 await callback.bot.send_message(
                     chat_id=config.moderation_chat_id,
                     text=t("moderation.action.returned_to_queue", language, poster_id=poster_id, username=callback.from_user.username or "no_username"),

@@ -145,7 +145,7 @@ def moderation_keyboard(user_id: int, is_anonymous: bool, poster_id: int, langua
     """Keyboard for moderators (approve/decline)"""
     builder = InlineKeyboardBuilder()
     anon_flag = "1" if is_anonymous else "0"
-    
+
     builder.row(
         InlineKeyboardButton(
             text=t("keyboards.moderation.approve", language),
@@ -156,7 +156,7 @@ def moderation_keyboard(user_id: int, is_anonymous: bool, poster_id: int, langua
             callback_data=f"decline:{user_id}:{anon_flag}:{poster_id}"
         )
     )
-    
+
 
     builder.row(
         InlineKeyboardButton(
@@ -164,7 +164,7 @@ def moderation_keyboard(user_id: int, is_anonymous: bool, poster_id: int, langua
             callback_data=f"userinfo:{user_id}"
         )
     )
-    
+
     return builder
 
 

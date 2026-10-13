@@ -131,6 +131,9 @@ async def safe_edit_keyboard(bot, chat_id: int, message, keyboard):
 async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMContext):
     """Process moderator approve/decline decision"""
 
+    # Log the callback data for debugging
+    logger.debug(f"Received callback data: {callback.data}")
+    
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
 
     if callback.from_user.id not in config.admin_ids:

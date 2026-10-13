@@ -12,6 +12,7 @@ import html
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton, InputMediaPhoto
 from sqlalchemy import and_, func
@@ -30,7 +31,7 @@ from bot.keyboards import (
 )
 from db.models import get_session, Poster, User
 from db.crud import get_poster, update_poster_status, ModerationStatus, get_pending_posters_count, get_user_stats
-from utils.helpers import format_public_caption, format_moderation_caption, send_long_message, plain_text_length, TG_CAPTION_LIMIT
+from utils.helpers import format_public_caption, format_moderation_caption, send_long_message, plain_text_length, TG_CAPTION_LIMIT, _trim_caption
 from config import config
 from datetime import datetime
 
@@ -43,7 +44,8 @@ moderator_edit_router = Router(name="moderator_edit") # Moderator DM handlers
 
 async def safe_edit_moderation_message(bot, chat_id: int, message, status_text: str):
     """
-    Safely edit moderation message, handling InaccessibleMessage after group migration.
+    Safely edit moderation message, handling InaccessibleMessage after group migration
+    and MEDIA_CAPTION_TOO_LONG by splitting overflow into a reply.
     Returns True if edit succeeded, False if message was inaccessible.
     """
     try:
@@ -60,6 +62,25 @@ async def safe_edit_moderation_message(bot, chat_id: int, message, status_text: 
                 reply_markup=None
             )
         return True
+    except TelegramBadRequest as e:
+        if "MEDIA_CAPTION_TOO_LONG" in str(e) and message.photo:
+            # Split: keep original caption intact, send the status block as a reply
+            original_caption = message.caption or ""
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=status_text.replace("\n\n━━━━━━━━━━━━━━━━━━━━", ""),
+                    parse_mode="HTML",
+                    reply_parameters=types.ReplyParameters(message_id=message.message_id)
+                )
+                logger.info(
+                    f"Split long caption for poster: kept original ({len(original_caption)} chars), "
+                    f"sent status suffix ({len(status_text)} chars) as reply"
+                )
+            except Exception:
+                pass
+            return True
+        raise
     except Exception as e:
         # Message is inaccessible (e.g., group migrated to supergroup)
         logger.warning(f"Could not edit moderation message (likely migrated): {e}")

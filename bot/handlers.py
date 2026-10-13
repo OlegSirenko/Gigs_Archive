@@ -27,7 +27,7 @@ from bot.keyboards import (
     privacy_acceptance_keyboard
 )
 from db.models import get_session, User, Poster
-from db.crud import get_or_create_user, create_poster, get_user_stats
+from db.crud import get_or_create_user, create_poster, commit_poster, get_user_stats
 from utils.helpers import (
     format_preview_text,
     validate_caption,
@@ -1141,7 +1141,7 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
                 photos_json=data.get('photos_json')  # ← NEW: Store media group photos
             )
 
-            # Send to moderation chat
+            # ✅ Send to moderation chat FIRST (before committing to DB)
             from bot.keyboards import moderation_keyboard
             from utils.helpers import format_moderation_caption
             from db.crud import update_moderation_message_info
@@ -1165,13 +1165,13 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
 
             # ✅ Check if this is a media group (album)
             is_media_group = data.get('is_media_group', False)
-            
+
             if is_media_group:
                 # Send album to moderation
                 photos_json = data.get('photos_json')
                 if photos_json:
                     photos_list = json.loads(photos_json)
-                    
+
                     # Create media group for moderation
                     media_group = []
                     for i, photo_data in enumerate(photos_list):
@@ -1191,16 +1191,16 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
                                     media=photo_data['file_id']
                                 )
                             )
-                    
+
                     # Send media group (no reply_markup - send separately)
                     sent_messages = await callback.bot.send_media_group(
                         chat_id=config.moderation_chat_id,
                         media=media_group
                     )
-                    
+
                     # Store first message ID for moderation
                     sent_message = sent_messages[0]
-                    
+
                     # Send keyboard as separate message below the album
                     await callback.bot.send_message(
                         chat_id=config.moderation_chat_id,
@@ -1233,6 +1233,9 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
                 moderation_message_id=sent_message.message_id,
                 moderation_chat_id=config.moderation_chat_id
             )
+
+            # ✅ NOW COMMIT — only reached if all external ops above succeeded
+            commit_poster(session, poster)
 
         await safe_edit_text(
             callback.message,

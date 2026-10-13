@@ -56,7 +56,7 @@ def create_poster(
     is_anonymous: bool,
     photos_json: str = None
 ) -> Poster:
-    """Create new poster submission"""
+    """Create new poster submission (pending commit). Call session.commit() separately."""
     poster = Poster(
         user_id=user_id,
         photo_file_id=photo_file_id,
@@ -67,6 +67,11 @@ def create_poster(
         status=ModerationStatus.PENDING
     )
     session.add(poster)
+    session.refresh(poster)
+    return poster
+
+def commit_poster(session: Session, poster: Poster) -> Poster:
+    """Commit a pending poster to the database after external operations succeed."""
     session.commit()
     session.refresh(poster)
     return poster

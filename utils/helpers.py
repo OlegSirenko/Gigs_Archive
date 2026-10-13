@@ -39,8 +39,10 @@ _EMOJI_RE = re.compile(
 
 # Остатки telegram-разметки: <a href="...">...</a>, голые URL, markdown-ссылки
 _TG_LINK_TAG_RE = re.compile(r'<a\b[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
+# <tg-emoji emoji-id="...">😀</tg-emoji> — keep the inner emoji, drop the wrapper
+_TG_EMOJI_TAG_RE = re.compile(r'<tg-emoji\b[^>]*>(.*?)</tg-emoji>', re.IGNORECASE | re.DOTALL)
 _TG_HTML_TAG_RE = re.compile(
-    r'</?\s*(?:a|u|s|strong|ins|del|b|i|em|span|pre|code|blockquote)\b[^>]*>',
+    r'</?\s*(?:a|u|s|strong|ins|del|b|i|em|span|pre|code|blockquote|tg-emoji|tg-spoiler|tg-time)\b[^>]*>',
     re.IGNORECASE,
 )
 _MD_LINK_RE = re.compile(r'\[([^\]]*)\]\((?:https?://)?[^\s)]+\)')
@@ -70,6 +72,7 @@ def strip_telegram_markup(text: str | None) -> str:
     """
     if not text:
         return ""
+    text = _TG_EMOJI_TAG_RE.sub(lambda m: m.group(1), text)
     text = _TG_LINK_TAG_RE.sub(lambda m: m.group(1), text)
     text = _MD_LINK_RE.sub(lambda m: m.group(1), text)
     text = _TG_HTML_TAG_RE.sub("", text)
@@ -227,19 +230,21 @@ def format_moderation_caption(data: Dict, poster_id: int, language: str = "ru") 
     else:
         date_formatted = t("moderation.preview.not_specified", language)
 
-    return (
+    header = (
         f"{t('moderation.preview.submission_title', language)}\n\n"
         f"{t('moderation.preview.poster_id', language, poster_id=poster_id)}\n"
         f"{t('moderation.preview.user_id', language, user_id=data.get('user_id'))} (@{username})\n"
         f"{t('moderation.preview.anonymous', language, anonymous=t('common.yes' if is_anon else 'common.no', language))}\n"
         f"{t('moderation.preview.event_date', language, date=date_formatted)}\n\n"
         f"{t('moderation.preview.original_caption', language)}\n"
-        # Moderation chat shows the submission as a *photo caption* (1024-char
-        # hard limit). The user's caption was validated against 874 chars, but
-        # this header adds ~150 more — trim defensively so the API never
-        # rejects the moderation post with an opaque "TOO_LONG".
-        f"{_trim_caption(data.get('caption') or t('moderation.preview.no_description', language))}"
     )
+    # Moderation chat shows the submission as a *photo caption* (1024-char
+    # hard limit). The user's caption may itself use the full 1024, and this
+    # header adds ~150 more — so trim the *combined* string defensively to the
+    # real TG_CAPTION_LIMIT (1024), never a made-up sub-limit. The channel
+    # post itself always uses the full un-trimmed caption.
+    body = data.get("caption") or t("moderation.preview.no_description", language)
+    return _trim_caption(header + body, TG_CAPTION_LIMIT)
 
 
 def format_public_caption(data: dict, user_info: dict | None = None, language: str = "ru") -> str:
@@ -326,11 +331,14 @@ def format_public_caption(data: dict, user_info: dict | None = None, language: s
     # Combine all parts
     result = f"{author_line}{date_line}\n{caption}"
 
-    # Final safety net: Telegram rejects photo captions longer than 1024 chars
-    # with an opaque "TOO_LONG" API error. The user caption was validated
-    # against a smaller effective limit, but attribution/source links appended
-    # here could still push it over — trim defensively instead of failing.
-    return _trim_caption(result.strip())
+    # No artificial trimming / splitting here on purpose: the full caption is
+    # returned as-is. Telegram's real photo-caption limit (TG_CAPTION_LIMIT =
+    # 1024 visible chars) is enforced by the Bot API itself — if the final
+    # caption is too long the API answers with a TOO_LONG error, which the
+    # publishing handlers catch and translate into a clear, user-facing
+    # message via describe_telegram_error(). Long captions are therefore NOT
+    # silently cut or split across several messages.
+    return result.strip()
 
 
 # Telegram photo caption hard limit (in characters). Captions longer than this
@@ -341,12 +349,11 @@ TG_CAPTION_LIMIT = 1024
 # 4,096 UTF-8 characters. Longer texts must be split into several messages.
 TG_TEXT_LIMIT = 4096
 
-# Safety margin so attribution/links appended after validation still fit.
-TG_CAPTION_SAFETY_MARGIN = 150
-
-# Effective limit used when validating user captions: the real API limit minus
-# the safety margin (author line, date line, source link etc. are added later).
-TG_CAPTION_EFFECTIVE_LIMIT = TG_CAPTION_LIMIT - TG_CAPTION_SAFETY_MARGIN
+# NOTE: user captions are validated against the *real* API limit
+# (TG_CAPTION_LIMIT = 1024) — there is no artificial "effective" sub-limit
+# and long captions are NEVER split across several messages. If Telegram
+# rejects a send with TOO_LONG, the handlers catch it and show the user a
+# clear explanation via describe_telegram_error().
 
 
 def split_message(text: str, limit: int = TG_TEXT_LIMIT) -> list[str]:
@@ -356,9 +363,19 @@ def split_message(text: str, limit: int = TG_TEXT_LIMIT) -> list[str]:
     are opened inside a chunk but not closed there are closed at the end of the
     chunk and re-opened at the start of the next one. Chunks are broken at
     paragraph or word boundaries whenever possible.
+
+    ``<tg-emoji emoji-id="...">😀</tg-emoji>`` wrappers (produced when
+    re-parsing forwarded messages with custom emoji via HtmlDecoration) are
+    stripped before splitting: Telegram does not allow them in bot messages
+    anyway, and their ~30-char markup would otherwise eat into the 4096-char
+    budget and could be cut in half at a chunk boundary, making the whole
+    message unsendable ("can't parse entities"). The emoji characters
+    themselves are kept and count toward the visible length.
     """
     if not text:
         return []
+    # Drop <tg-emoji ...> wrappers everywhere (see docstring), keep inner emoji.
+    text = _TG_EMOJI_TAG_RE.sub(r"\1", text)
     if len(text) <= limit:
         return [text]
 
@@ -439,7 +456,8 @@ def plain_text_length(html_text: str) -> int:
     """
     if not html_text:
         return 0
-    without_links = _TG_LINK_TAG_RE.sub(r"\1", html_text)
+    without_emoji = _TG_EMOJI_TAG_RE.sub(r"\1", html_text)
+    without_links = _TG_LINK_TAG_RE.sub(r"\1", without_emoji)
     without_tags = _TG_HTML_TAG_RE.sub("", without_links)
     return len(html.unescape(without_tags))
 
@@ -467,18 +485,22 @@ def validate_caption(caption: str, language: str = "ru") -> tuple[bool, str]:
         )
 
     # ---- Too long ("too many chars") -------------------------------------
-    # Validate against the *effective* limit (1024 minus a safety margin),
-    # because author line / date / source link are appended later in the flow
-    # and would otherwise push the final caption over the API limit.
+    # Validate against Telegram's real photo-caption limit (1024 visible
+    # characters). Markup (<b>, <a href=...>, <tg-emoji ...>) is not counted —
+    # only what the reader sees. This early check exists purely to give the
+    # user a clear error up-front; if something still pushes the final caption
+    # over the limit at publish time (author/date lines, source link), the Bot
+    # API itself rejects it with TOO_LONG and the handler shows that error to
+    # the user instead of silently trimming or splitting the caption.
     actual_len = plain_text_length(stripped)
-    if actual_len > TG_CAPTION_EFFECTIVE_LIMIT:
+    if actual_len > TG_CAPTION_LIMIT:
         return False, (
             t(
                 "poster_flow.validation_error.too_long",
                 language,
                 current=actual_len,
-                limit=TG_CAPTION_EFFECTIVE_LIMIT,
-                excess=actual_len - TG_CAPTION_EFFECTIVE_LIMIT,
+                limit=TG_CAPTION_LIMIT,
+                excess=actual_len - TG_CAPTION_LIMIT,
             )
             + "\n\n"
             + t("poster_flow.validation_error.too_long_hint", language)
@@ -498,9 +520,24 @@ def validate_caption(caption: str, language: str = "ru") -> tuple[bool, str]:
     return True, ""
 
 
-def describe_telegram_error(error: Exception, language: str = "ru") -> str:
+def describe_telegram_error(
+    error: Exception,
+    language: str = "ru",
+    caption_length: int | None = None,
+    limit: int = TG_CAPTION_LIMIT,
+) -> str:
     """Translate a raw aiogram/Telegram API exception into a friendly,
     human-readable explanation the user can act on.
+
+    Args:
+        error: the caught TelegramAPIError (or any other exception).
+        language: user's language code.
+        caption_length: optional *visible* length of the caption/text that
+            Telegram rejected. When provided (and over ``limit``) the message
+            includes the exact numbers — how many characters there are and by
+            how many they exceed the limit — instead of a vague warning.
+        limit: the Telegram limit that was hit (1024 for photo captions,
+            4096 for plain text messages).
 
     Falls back to a generic message with the original error text so nothing
     is ever silently swallowed.
@@ -511,6 +548,14 @@ def describe_telegram_error(error: Exception, language: str = "ru") -> str:
 
     # Message/caption exceeds Telegram limits (HTTP 400, "TOO_LONG")
     if "too_long" in lowered or "too long" in lowered:
+        if caption_length and caption_length > limit:
+            return t(
+                "common.errors.too_long_details",
+                language,
+                current=caption_length,
+                limit=limit,
+                excess=caption_length - limit,
+            )
         return t("common.errors.too_long", language)
 
     # Bad entity offsets / unbalanced HTML tags (HTTP 400, "can't parse entities")
@@ -540,8 +585,15 @@ def describe_telegram_error(error: Exception, language: str = "ru") -> str:
 def _trim_caption(caption: str, limit: int = TG_CAPTION_LIMIT) -> str:
     """Trim an HTML caption so its *visible* length fits Telegram's 1024-char
     photo-caption limit. Cuts at paragraph/word boundaries and re-balances any
-    HTML tag left open by the cut, so the result is always valid HTML."""
-    if not caption or plain_text_length(caption) <= limit:
+    HTML tag left open by the cut, so the result is always valid HTML.
+
+    ``<tg-emoji ...>`` wrappers are stripped first (they are not allowed in
+    bot-sent messages and their markup must not count toward the visible
+    length or be cut mid-tag)."""
+    if not caption:
+        return caption
+    caption = _TG_EMOJI_TAG_RE.sub(r"\1", caption)
+    if plain_text_length(caption) <= limit:
         return caption
 
     tag_re = re.compile(r"<(/?)(b|i|u|s|a|code|pre|blockquote)(\s[^>]*)?>", re.IGNORECASE)

@@ -33,6 +33,7 @@ from utils.helpers import (
     validate_caption,
     extract_forwarded_info,
     describe_telegram_error,
+    plain_text_length,
     TG_CAPTION_LIMIT,
 )
 from utils.html import get_html_caption
@@ -1117,14 +1118,31 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
     data = await state.get_data()
 
-    # ---- Re-validate right before sending --------------------------------
-    # Captions can grow past Telegram's 1024-char photo-caption limit AFTER
-    # the initial upload check (e.g. forwarded attribution / source link is
-    # appended later in the flow). Catch it here with a clear message instead
-    # of letting the API fail with an opaque "TOO_LONG" error.
+    # ---- Final length check (attribution-aware) ---------------------------
+    # The caption may have grown past Telegram's real photo-caption limit
+    # (TG_CAPTION_LIMIT = 1024 visible chars) after the initial upload check:
+    # forwarded attribution / source link lines are appended earlier in the
+    # flow and count toward the final caption sent to the moderation chat.
+    # We only guard against exceeding the REAL limit — nothing else is
+    # validated or trimmed here; if the API still rejects the send for any
+    # reason (e.g. TOO_LONG), the except-block below catches it and shows the
+    # user the full explanation via describe_telegram_error().
     caption_to_send = data.get("caption", "") or ""
-    is_valid, error_message = validate_caption(caption_to_send, language)
-    if not is_valid:
+    caption_len = plain_text_length(caption_to_send)
+    if caption_len > TG_CAPTION_LIMIT:
+        error_message = (
+            t(
+                "poster_flow.validation_error.too_long",
+                language,
+                current=caption_len,
+                limit=TG_CAPTION_LIMIT,
+                excess=caption_len - TG_CAPTION_LIMIT,
+            )
+            + "\n\n"
+            + t("poster_flow.validation_error.too_long_hint", language)
+            + "\n\n"
+            + t("poster_flow.validation_error.retry_hint", language)
+        )
         await handle_validation_error(callback.message, state, error_message, language)
         await callback.answer()
         return
@@ -1248,11 +1266,15 @@ async def confirm_submission(callback: types.CallbackQuery, state: FSMContext):
 
     except TelegramAPIError as e:
         # Telegram rejected our request (e.g. caption TOO_LONG, bad HTML
-        # entities, expired file reference). Tell the user exactly why.
+        # entities, expired file reference). Tell the user exactly why —
+        # including the precise visible caption length vs. the 1024-char
+        # photo-caption limit when the failure is a length problem.
         logger.error(f"Submission failed (Telegram API): {e}")
         await state.clear()
         await callback.message.answer(
-            describe_telegram_error(e, language),
+            describe_telegram_error(
+                e, language, caption_length=plain_text_length(caption_to_send)
+            ),
             parse_mode="HTML",
             reply_markup=retry_keyboard(language).as_markup(),
         )

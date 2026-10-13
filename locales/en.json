@@ -258,6 +258,9 @@
       "pending_final_hint": "<i>Moderator is working on the description...</i>",
       "approved": "✅ <b>APPROVED</b>",
       "declined": "❌ <b>DECLINED</b>"
+    },
+    "publish_error": {
+      "title": "❌ <b>Publishing aborted</b> — Telegram rejected the message:"
     }
   },
   "subscription": {
@@ -328,7 +331,8 @@
       "chat_not_found": "⚠️ Could not find the required chat (channel or moderation group). Make sure the bot is added there as an administrator.",
       "bot_blocked": "⚠️ The user has blocked the bot, so the notification could not be delivered.",
       "unexpected": "⚠️ An unexpected error occurred. Please try again; if it keeps happening, contact the administrator.",
-      "details_title": "<i>Error details:</i>"
+      "details_title": "<i>Error details:</i>",
+      "too_long_details": "⚠️ Telegram rejected the message: it is too long — <b>{current}</b> visible characters vs. the <b>{limit}</b> limit ({excess} over). Please shorten the description and try publishing again."
     },
     "privacy_decline": "❌ Decline (delete my data)",
     "privacy_accepted_thanks": "✅ Thank you! Your acceptance of the privacy policy has been recorded. You can continue using the bot.",

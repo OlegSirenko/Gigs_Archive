@@ -4,6 +4,7 @@ Moderator handlers for approval workflow and DM finalization.
 Separated from user handlers for clarity.
 """
 
+import html
 import re
 import asyncio
 import logging
@@ -20,6 +21,11 @@ from db.crud import get_moderator_stats
 # ✅ ADD i18n IMPORT
 from utils.i18n import i18n, t
 
+# Single source of truth for stripping <tg-emoji ...> wrappers (kept inner
+# emoji, dangling openers dropped) — used wherever HtmlDecoration.unparse()
+# output is stored or sent.
+from utils.html import _strip_tg_emoji
+
 from bot.moderator_states import ModeratorEdit
 from bot.keyboards import (
     moderation_keyboard,
@@ -29,7 +35,16 @@ from bot.keyboards import (
 )
 from db.models import get_session, Poster, User
 from db.crud import get_poster, update_poster_status, ModerationStatus, get_pending_posters_count, get_user_stats
-from utils.helpers import format_public_caption, format_moderation_caption, send_long_message
+from aiogram.exceptions import TelegramAPIError
+
+from utils.helpers import (
+    format_public_caption,
+    format_moderation_caption,
+    plain_text_length,
+    _trim_caption,
+    describe_telegram_error,
+    TG_CAPTION_LIMIT,
+)
 from config import config
 from datetime import datetime
 
@@ -44,11 +59,18 @@ async def safe_edit_moderation_message(bot, chat_id: int, message, status_text: 
     """
     Safely edit moderation message, handling InaccessibleMessage after group migration.
     Returns True if edit succeeded, False if message was inaccessible.
+
+    NOTE: photo captions are hard-capped by Telegram at TG_CAPTION_LIMIT (1024)
+    characters — appending a status block to an already-long caption would fail
+    with TOO_LONG and leave the message stuck with outdated status/buttons. So
+    for photo messages we *replace* the caption with a compact status line
+    instead of concatenating; text messages have a 4096-char budget and keep
+    the append behaviour.
     """
     try:
         if message.photo:
             await message.edit_caption(
-                caption=(message.caption or "") + status_text,
+                caption=_trim_caption(status_text.strip("\n")),
                 parse_mode="HTML",
                 reply_markup=None
             )
@@ -520,7 +542,6 @@ async def start_editing(callback: types.CallbackQuery, state: FSMContext):
         )
 
         # ✅ Escape original caption for safe display in <code> block
-        import html
         safe_original = html.escape(poster.caption or t("common.no_caption", language), quote=True)
         
         # ✅ Build keyboard with Cancel button
@@ -545,57 +566,6 @@ async def start_editing(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer()
 
 
-
-@moderator_edit_router.callback_query(F.data.startswith("moderator:start_edit:"))
-async def start_editing(callback: types.CallbackQuery, state: FSMContext):
-    """Handle 'Start Editing' button - sets FSM state in DM context"""
-
-    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
-    poster_id = int(callback.data.split(":")[2])
-
-    with get_session() as session:
-        poster = get_poster(session, poster_id)
-        if not poster:
-            await callback.answer(t("common.not_found", language), show_alert=True)
-            return
-
-        # ✅ SET FSM STATE HERE (in DM context!)
-        await state.set_state(ModeratorEdit.waiting_for_description)
-        await state.update_data(
-            poster_id=poster_id,
-            user_id=poster.user_id,
-            is_anonymous=poster.is_anonymous,
-            photo_file_id=poster.photo_file_id,
-            original_caption=poster.caption,  # Store for display/cancel
-            event_date=poster.event_date.isoformat() if poster.event_date else None,
-            first_name=poster.user.first_name if poster.user else None,
-            username=poster.user.username if poster.user else None,
-        )
-
-        # ✅ Escape original caption for safe display in <code> block
-        import html
-        safe_original = html.escape(poster.caption or t("common.no_caption", language), quote=True)
-        
-        # ✅ Build keyboard with Cancel button
-        cancel_builder = InlineKeyboardBuilder()
-        cancel_builder.row(
-            InlineKeyboardButton(
-                text=t("keyboards.moderator.cancel_editing", language),
-                callback_data=f"moderator:cancel_edit:{poster_id}"
-            )
-        )
-
-        # ✅ EDIT instruction message to show input prompt + original caption
-        await callback.message.edit_text(
-            f"{t('moderation.start_editing.title', language)}\n\n"
-            f"{t('moderation.start_editing.description', language)}\n\n"
-            f"{t('moderation.start_editing.original_label', language)}\n"
-            f"<code>{safe_original}</code>",  # ← Copiable original caption
-            parse_mode="HTML",
-            reply_markup=cancel_builder.as_markup()
-        )
-        
-        await callback.answer()
 
 @moderator_edit_router.callback_query(F.data.startswith("moderator:skip:"))
 async def skip_description(callback: types.CallbackQuery, state: FSMContext):
@@ -732,18 +702,29 @@ async def process_moderator_description(message: types.Message, state: FSMContex
     moderator_id = message.from_user.id
 
     # ✅ Get caption with HTML formatting if available
-    # Use HtmlDecoration.unparse for both captions and text messages
+    # Use HtmlDecoration.unparse for both captions and text messages.
+    # NOTE: custom-emoji entities (<tg-emoji emoji-id="...">😀</tg-emoji>) are
+    # stripped right here — bots cannot send that tag, and its ~30-char markup
+    # would otherwise inflate the stored caption against Telegram's 1024/4096
+    # character limits (the "too many chars" trouble when forwarding posts).
     from aiogram.utils.text_decorations import HtmlDecoration
     html_decoration = HtmlDecoration()
-    
+
     if message.caption:
         # Photo/video/document with caption
-        final_caption = html_decoration.unparse(message.caption, message.caption_entities)
+        final_caption = _strip_tg_emoji(html_decoration.unparse(message.caption, message.caption_entities))
     elif message.text:
         # Plain text message (moderator typing in DM)
-        final_caption = html_decoration.unparse(message.text, message.entities)
+        final_caption = _strip_tg_emoji(html_decoration.unparse(message.text, message.entities))
     else:
         final_caption = ""
+
+    # NOTE: we do NOT trim or split oversized captions here. Telegram's real
+    # photo-caption limit (1024 visible chars) is enforced by the Bot API at
+    # publish time — if the final caption does not fit, the send fails with a
+    # TOO_LONG error which the publishing handler catches and explains to the
+    # moderator in full. The caption is stored exactly as typed.
+
 
     with get_session() as session:
         poster = session.query(Poster).filter(
@@ -783,18 +764,31 @@ async def process_moderator_description(message: types.Message, state: FSMContex
         )
 
         # Build preview — use HTML caption if available
+        preview_data = {
+            "caption": final_caption,
+            "event_date": poster.event_date.isoformat() if poster.event_date else None,
+            "is_anonymous": poster.is_anonymous
+        }
         preview_caption = format_public_caption(
-            data={
-                "caption": final_caption,
-                "event_date": poster.event_date.isoformat() if poster.event_date else None,
-                "is_anonymous": poster.is_anonymous
-            },
+            data=preview_data,
             user_info=None if poster.is_anonymous else {
                 "first_name": poster.user.first_name if poster.user else None,
                 "username": poster.user.username if poster.user else None
             },
             language=language
         )
+        # Info for the moderator if the final preview exceeds the 1024-char
+        # photo-caption limit — publishing such a caption will fail with a
+        # TOO_LONG API error, which is then shown in full. No silent trimming.
+        preview_len = plain_text_length(preview_caption)
+        if preview_len > TG_CAPTION_LIMIT:
+            preview_caption += (
+                f"\n\n⚠️ Итоговая подпись ({preview_len} симв.) превышает лимит Telegram"
+                f" для подписи фото ({TG_CAPTION_LIMIT} симв.)."
+                f" Публикация с таким текстом завернётся ошибкой TOO_LONG —"
+                f" сократите описание минимум на {preview_len - TG_CAPTION_LIMIT} симв."
+                f" (с учётом строк автора/даты)."
+            )
         
         # Build keyboard
         confirm_builder = InlineKeyboardBuilder()
@@ -866,12 +860,16 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
         # ✅ SAVE MODERATOR'S FINAL CAPTION TO DATABASE
         poster.caption = data.get("final_caption")
 
+        public_data = {
+            "caption": data.get("final_caption"),
+            "event_date": data.get("event_date"),
+            "is_anonymous": data.get("is_anonymous"),
+            "telegram_link": data.get("telegram_link"),
+            "is_forwarded": data.get("is_forwarded"),
+            "forward_source": data.get("forward_source"),
+        }
         final_caption = format_public_caption(
-            data={
-                "caption": data.get("final_caption"),
-                "event_date": data.get("event_date"),
-                "is_anonymous": data.get("is_anonymous")
-            },
+            data=public_data,
             user_info=None if data.get("is_anonymous") else {
                 "first_name": data.get("first_name"),
                 "username": data.get("username")
@@ -879,97 +877,87 @@ async def final_confirm(callback: types.CallbackQuery, state: FSMContext):
             language=language
         )
 
-        if config.debug_mode:
-            final_caption += t("moderation.action.test_mode_caption", language)
-
-        # ---- "Too many chars" guard --------------------------------------
-        # Telegram photo captions are hard-capped at 1024 characters; before
-        # this was fixed, longer posts failed to publish with an opaque
-        # TOO_LONG API error. format_public_caption() trims defensively, but
-        # we also detect the situation here and keep the *full* text by
-        # sending the overflow as a separate text message (limit 4096,
-        # auto-split) right after the photo.
-        caption_overflow_text = ""
-        if plain_text_length(final_caption) > TG_CAPTION_LIMIT:
-            logger.warning(
-                f"Poster {poster_id}: caption is {plain_text_length(final_caption)} chars "
-                f"(limit {TG_CAPTION_LIMIT}) — splitting overflow into a text message"
-            )
-            full_body = data.get("final_caption") or ""
-            trimmed_len = plain_text_length(_trim_caption(full_body))
-            # The trimmed caption keeps the head of the body; send the tail.
-            if len(full_body) > trimmed_len:
-                caption_overflow_text = full_body[trimmed_len:].lstrip()
-
         # ✅ Check if this is a media group (album)
         photos_json = poster.photos_json or data.get("photos_json")
-        
-        if photos_json:
-            # Send album to channel
-            try:
-                photos_list = json.loads(photos_json)
-                
-                # Create media group for channel
-                media_group = []
-                for i, photo_data in enumerate(photos_list):
-                    if i == 0:
-                        # First photo gets the full caption
-                        media_group.append(
-                            InputMediaPhoto(
-                                media=photo_data['file_id'],
-                                caption=final_caption,
-                                parse_mode="HTML"
+
+        # ---- "Too many chars" handling -----------------------------------
+        # The caption is sent EXACTLY as formatted — no trimming and NO
+        # splitting across several messages. If Telegram rejects the post
+        # (HTTP 400 TOO_LONG), we catch it below and show the moderator the
+        # full explanation with exact numbers (visible length vs. the real
+        # 1024-char photo-caption limit); publishing is aborted so nothing
+        # half-baked lands in the channel. If the API accepts the caption,
+        # there is no problem to work around — the limit is never changed
+        # or pre-empted by our own code.
+        try:
+            if photos_json:
+                # Send album to channel
+                try:
+                    photos_list = json.loads(photos_json)
+
+                    # Create media group for channel
+                    media_group = []
+                    for i, photo_data in enumerate(photos_list):
+                        if i == 0:
+                            # First photo gets the full caption
+                            media_group.append(
+                                InputMediaPhoto(
+                                    media=photo_data['file_id'],
+                                    caption=final_caption,
+                                    parse_mode="HTML"
+                                )
                             )
-                        )
-                    else:
-                        # Subsequent photos without caption
-                        media_group.append(
-                            InputMediaPhoto(
-                                media=photo_data['file_id']
+                        else:
+                            # Subsequent photos without caption
+                            media_group.append(
+                                InputMediaPhoto(
+                                    media=photo_data['file_id']
+                                )
                             )
-                        )
-                
-                # Send media group to channel
-                sent_messages = await callback.bot.send_media_group(
-                    chat_id=target_channel_id,
-                    media=media_group
-                )
-                
-                # Store first message ID
-                sent_message = sent_messages[0]
-                
-            except Exception as e:
-                logger.error(f"Error sending media group to channel: {e}")
-                # Fallback to single photo
+
+                    # Send media group to channel
+                    sent_messages = await callback.bot.send_media_group(
+                        chat_id=target_channel_id,
+                        media=media_group
+                    )
+
+                    # Store first message ID
+                    sent_message = sent_messages[0]
+
+                except TelegramAPIError:
+                    raise
+                except Exception as e:
+                    logger.error(f"Error sending media group to channel: {e}")
+                    # Fallback to single photo
+                    sent_message = await callback.bot.send_photo(
+                        chat_id=target_channel_id,
+                        photo=data.get("photo_file_id") or poster.photo_file_id,
+                        caption=final_caption,
+                        parse_mode="HTML"
+                    )
+            else:
+                # Send single photo to channel
                 sent_message = await callback.bot.send_photo(
                     chat_id=target_channel_id,
                     photo=data.get("photo_file_id") or poster.photo_file_id,
                     caption=final_caption,
                     parse_mode="HTML"
                 )
-        else:
-            # Send single photo to channel
-            sent_message = await callback.bot.send_photo(
-                chat_id=target_channel_id,
-                photo=data.get("photo_file_id") or poster.photo_file_id,
-                caption=final_caption,
-                parse_mode="HTML"
-            )
 
-        # If the caption didn't fit Telegram's 1024-char limit, publish the
-        # remaining text as a follow-up message so nothing is lost (each text
-        # message supports up to 4096 chars and is auto-split beyond that).
-        if caption_overflow_text:
-            try:
-                await send_long_message(
-                    callback.bot,
-                    chat_id=target_channel_id,
-                    text=caption_overflow_text,
-                    parse_mode="HTML",
-                )
-            except Exception as e:
-                logger.error(f"Could not send caption overflow text for poster {poster_id}: {e}")
-        
+        except TelegramAPIError as e:
+            caption_len = plain_text_length(final_caption)
+            logger.error(
+                f"Publishing poster {poster_id} rejected by Telegram API: {e} "
+                f"(caption visible length: {caption_len})"
+            )
+            await callback.answer(t("common.errors.publish_failed", language), show_alert=True)
+            await callback.message.edit_text(
+                f"{t('moderation.publish_error.title', language)}\n\n"
+                + describe_telegram_error(e, language, caption_length=caption_len),
+                parse_mode="HTML",
+            )
+            return
+
         # Update database to APPROVED (final) - this will commit the caption change too!
         update_poster_status(
             session=session,

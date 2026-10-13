@@ -53,13 +53,13 @@ async def safe_edit_moderation_message(bot, chat_id: int, message, status_text: 
             await message.edit_caption(
                 caption=(message.caption or "") + status_text,
                 parse_mode="HTML",
-                reply_markup=message.reply_markup
+                reply_markup=message.reply_markup  # <- THIS WAS THE FIX: preserve the keyboard
             )
         else:
             await message.edit_text(
                 text=(message.text or "") + status_text,
                 parse_mode="HTML",
-                reply_markup=message.reply_markup
+                reply_markup=message.reply_markup  # <- THIS WAS THE FIX: preserve the keyboard
             )
         return True
     except TelegramBadRequest as e:
@@ -131,14 +131,8 @@ async def safe_edit_keyboard(bot, chat_id: int, message, keyboard):
 async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMContext):
     """Process moderator approve/decline decision"""
     
-    # For debugging - log the callback data and the pattern match
-    logger.debug(f"Callback data: {callback.data}")
-    import re
-    pattern = r"^(approve|decline):(\d+):([01]):(\d+)$"
-    match = re.match(pattern, callback.data)
-    logger.debug(f"Pattern match result: {match}")
-    if match:
-        logger.debug(f"Match groups: {match.groups()}")
+    # Log for debugging - this should show when the handler is actually called
+    logger.debug(f"DEBUG: handle_moderation_decision called with data: {callback.data}")
     
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
 
@@ -147,6 +141,7 @@ async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMCo
         return
 
     try:
+        # Direct parsing without complex validation - let the filter handle it
         action, user_id_str, anon_flag, poster_id_str = callback.data.split(":")
         user_id = int(user_id_str)
         poster_id = int(poster_id_str)

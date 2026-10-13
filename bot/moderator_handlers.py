@@ -130,39 +130,24 @@ async def safe_edit_keyboard(bot, chat_id: int, message, keyboard):
 @moderation_router.callback_query(F.data.regexp(r"^(approve|decline):(\d+):([01]):(\d+)$"))
 async def handle_moderation_decision(callback: types.CallbackQuery, state: FSMContext):
     """Process moderator approve/decline decision"""
-
-    # Log the callback data for debugging
-    logger.debug(f"Received callback data: {callback.data}")
     
-    # Validate callback data format
-    if not callback.data:
-        logger.warning("Empty callback data received")
-        await callback.answer("⚠️ Invalid request", show_alert=True)
-        return
-        
-    try:
-        parts = callback.data.split(":")
-        if len(parts) != 4:
-            logger.warning(f"Malformed callback data (wrong parts count): {callback.data}")
-            await callback.answer("⚠️ Invalid request", show_alert=True)
-            return
-            
-        action, user_id_str, anon_flag, poster_id_str = parts
-    except ValueError as e:
-        logger.warning(f"Malformed callback data: {callback.data} - Error: {e}")
-        await callback.answer("⚠️ Invalid request", show_alert=True)
-        return
-
+    # For debugging - log the callback data and the pattern match
+    logger.debug(f"Callback data: {callback.data}")
+    import re
+    pattern = r"^(approve|decline):(\d+):([01]):(\d+)$"
+    match = re.match(pattern, callback.data)
+    logger.debug(f"Pattern match result: {match}")
+    if match:
+        logger.debug(f"Match groups: {match.groups()}")
+    
     language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
 
     if callback.from_user.id not in config.admin_ids:
         await callback.answer(t("common.not_authorized", language), show_alert=True)
         return
 
-    # Add explicit logging to track if we enter this handler
-    logger.info(f"Processing moderation decision: {action} for poster {poster_id_str} from user {callback.from_user.id}")
-    
     try:
+        action, user_id_str, anon_flag, poster_id_str = callback.data.split(":")
         user_id = int(user_id_str)
         poster_id = int(poster_id_str)
         moderator_id = callback.from_user.id

@@ -40,6 +40,24 @@ def start_over_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     return builder
 
 
+def image_confirmation_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
+    """Confirm the image downloaded from a link (yes / no)"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text=t("poster_flow.image_link.confirm_yes", language),
+            callback_data="imglink:confirm"
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=t("poster_flow.image_link.confirm_no", language),
+            callback_data="imglink:reject"
+        )
+    )
+    return builder
+
+
 def anonymous_choice_keyboard(language: str = "ru") -> InlineKeyboardBuilder:
     """Choose anonymous or public posting"""
     builder = InlineKeyboardBuilder()

@@ -346,7 +346,7 @@ TG_CAPTION_LIMIT = 4096
 TG_TEXT_LIMIT = 4096
 
 # Safety margin so attribution/links appended after validation still fit.
-TG_CAPTION_SAFETY_MARGIN = 500
+TG_CAPTION_SAFETY_MARGIN = 0
 
 # Effective limit used when validating user captions: the real API limit minus
 # the safety margin (author line, date line, source link etc. are added later).

@@ -90,6 +90,15 @@
     "invalid_photo": {
       "text": "⚠️ Please send a <b>photo</b> for your poster.\nYou can add the event description in the caption."
     },
+    "image_link": {
+      "downloading": "📥 Downloading the image from the link...",
+      "confirm_question": "🤔 Is this the right image?",
+      "confirm_yes": "✅ Yes, all is correct",
+      "confirm_no": "❌ No, it is NOT right image",
+      "reject_text": "You can try to download image from other services",
+      "failed": "⚠️ Could not download the image from the link.\nYou can try to download image from other services.",
+      "not_a_post": "⚠️ This is not a link we could process.\nPlease send a link to an Instagram <b>post</b> (photo or video), not a profile."
+    },
     "validation_error": {
       "no_link": "⚠️ Please add at least one link to the event.",
       "examples_title": "<i>Examples:</i>",

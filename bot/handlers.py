@@ -10,9 +10,9 @@ import logging
 import json
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
-from aiogram.filters import Command
+from aiogram.filters import Command, Filter
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import InputMediaPhoto
+from aiogram.types import InputMediaPhoto, BufferedInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.states import PosterSubmission
 from bot.keyboards import (
@@ -22,9 +22,15 @@ from bot.keyboards import (
     anonymous_choice_keyboard,
     date_picker_keyboard,
     confirmation_keyboard,
+    image_confirmation_keyboard,
     language_selection_keyboard,
     privacy_policy_keyboard,
     privacy_acceptance_keyboard
+)
+from utils.image_link import (
+    download_image_from_link,
+    extract_instagram_link,
+    looks_like_instagram_url,
 )
 from db.models import get_session, User, Poster
 from db.crud import get_or_create_user, create_poster, commit_poster, get_user_stats
@@ -57,6 +63,16 @@ MEDIA_GROUP_TIMEOUT = 1.5  # seconds to wait for all photos
 # ============ ROUTERS ============
 commands_router = Router(name="commands")    # /start, /poster, /stats, /cancel
 poster_router = Router(name="poster")        # Poster submission FSM flow
+
+
+class InstagramLinkFilter(Filter):
+    """Matches private text messages that contain an Instagram link.
+
+    Catches ANY instagram.com link (post, profile, stories...) so that even
+    links we cannot process get a helpful reply instead of being ignored.
+    """
+    async def __call__(self, message: types.Message) -> bool:
+        return bool(message.text and looks_like_instagram_url(message.text))
 
 # ============ HELPER FUNCTIONS ============
 
@@ -937,6 +953,143 @@ async def process_photo_without_command(message: types.Message, state: FSMContex
     )
 
     logger.info(f"Auto-started poster flow for user {message.from_user.id}")
+
+# =============================================================================
+# ============ LINK-ONLY FLOW: download image from Instagram link =============
+# =============================================================================
+# User copied only the link to the poster (no photo attached). We download the
+# image ourselves and ask the user to confirm it before continuing the flow.
+
+@poster_router.message(F.text, F.chat.type == "private", InstagramLinkFilter())
+async def process_instagram_link(message: types.Message, state: FSMContext):
+    """Download the poster image from an Instagram link the user sent.
+
+    Shows the downloaded image and asks the user to confirm it. The image is
+    re-uploaded to Telegram so we obtain a real ``photo_file_id`` that is later
+    stored in the database (through the normal confirmation step).
+    """
+    language = i18n.get_user_language(message.from_user.language_code, message.from_user.id)
+
+    link = extract_instagram_link(message.text)
+    if not link:
+        # Instagram link, but not a single post (profile / stories / feed):
+        # we can only download an image from a post link.
+        await message.answer(
+            t('poster_flow.image_link.not_a_post', language),
+            parse_mode="HTML"
+        )
+        return
+
+    # Start a fresh flow
+    await state.clear()
+    await state.set_state(PosterSubmission.waiting_for_photo)
+
+    # Register/update user in database
+    with get_session() as session:
+        get_or_create_user(
+            session,
+            telegram_id=message.from_user.id,
+            username=message.from_user.username,
+            first_name=message.from_user.first_name,
+            last_name=message.from_user.last_name,
+            language_code=message.from_user.language_code,
+            is_premium=message.from_user.is_premium or False
+        )
+
+    # Tell the user we are working
+    status_message = await message.answer(
+        t('poster_flow.image_link.downloading', language)
+    )
+
+    # Download the image (non-blocking: urllib runs in a thread)
+    result = await download_image_from_link(link)
+
+    # Remove the "downloading..." notice
+    try:
+        await status_message.delete()
+    except TelegramAPIError:
+        pass
+
+    # Could not download an image -> offer to try another service
+    if not result:
+        await message.answer(
+            t('poster_flow.image_link.failed', language),
+            parse_mode="HTML",
+            reply_markup=retry_keyboard(language).as_markup()
+        )
+        await state.clear()
+        return
+
+    # Re-upload the image to Telegram to get a permanent photo_file_id
+    sent = await message.answer_photo(
+        BufferedInputFile(result.data, filename=result.filename or "poster.jpg"),
+        caption=t('poster_flow.image_link.confirm_question', language),
+        parse_mode="HTML",
+        reply_markup=image_confirmation_keyboard(language).as_markup()
+    )
+    photo_file_id = sent.photo[-1].file_id
+
+    # Store everything needed by the rest of the flow
+    await state.update_data(
+        photo_file_id=photo_file_id,
+        caption=link,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
+        first_name=message.from_user.first_name,
+        is_forwarded=False,
+        image_link=link,
+        language=language,
+        first_message_id=sent.message_id,
+        prev_bot_message_id=sent.message_id
+    )
+    await state.set_state(PosterSubmission.waiting_for_image_confirmation)
+
+    logger.info(f"Downloaded image from link for user {message.from_user.id}: {link}")
+
+
+@poster_router.callback_query(PosterSubmission.waiting_for_image_confirmation, F.data == "imglink:confirm")
+async def confirm_instagram_image(callback: types.CallbackQuery, state: FSMContext):
+    """User confirmed the downloaded image is correct -> continue the flow."""
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
+
+    await callback.answer()
+
+    # Remove the confirmation keyboard from the preview photo
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except TelegramAPIError:
+        pass
+
+    # Proceed to the normal "anonymous" step
+    await state.set_state(PosterSubmission.waiting_for_anonymous)
+    sent = await callback.message.answer(
+        f"{t('poster_flow.anonymous.title', language)}\n\n"
+        f"{t('poster_flow.anonymous.description', language)}",
+        parse_mode="HTML",
+        reply_markup=anonymous_choice_keyboard(language).as_markup()
+    )
+    await state.update_data(prev_bot_message_id=sent.message_id)
+
+
+@poster_router.callback_query(PosterSubmission.waiting_for_image_confirmation, F.data == "imglink:reject")
+async def reject_instagram_image(callback: types.CallbackQuery, state: FSMContext):
+    """User rejected the downloaded image -> suggest other services."""
+    language = i18n.get_user_language(callback.from_user.language_code, callback.from_user.id)
+
+    await callback.answer()
+    await state.clear()
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except TelegramAPIError:
+        pass
+
+    await callback.message.answer(
+        t('poster_flow.image_link.reject_text', language),
+        parse_mode="HTML"
+    )
+    logger.info(f"User {callback.from_user.id} rejected the downloaded image")
+
 
 # =============================================================================
 # ============ POSTER FLOW - STEP 1: PHOTO (After /poster command) ===========

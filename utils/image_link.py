@@ -251,11 +251,12 @@ async def download_image_from_link(
     timeout: float = DEFAULT_TIMEOUT,
     max_bytes: int = DEFAULT_MAX_BYTES,
     user_agent: str = DEFAULT_USER_AGENT,
+    trace: Optional[list] = None,
 ) -> Optional[LinkedImage]:
     """Асинхронная обёртка: блокирующий urllib уходит в отдельный поток."""
     return await asyncio.to_thread(
         fetch_image_from_link, url,
-        timeout=timeout, max_bytes=max_bytes, user_agent=user_agent,
+        timeout=timeout, max_bytes=max_bytes, user_agent=user_agent, trace=trace,
     )
 
 

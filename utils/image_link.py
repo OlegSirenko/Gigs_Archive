@@ -158,8 +158,13 @@ def _filename_from_url(url: str) -> str:
 #                          сетевая часть (sync)                               #
 # --------------------------------------------------------------------------- #
 
-def _http_get(url: str, *, timeout: float, max_bytes: int, user_agent: str):
+def _http_get(url: str, *, timeout: float, max_bytes: int, user_agent: str,
+              trace: Optional[list] = None):
     """GET с ограничением размера. Возвращает (final_url, headers, body) | None."""
+    def _log(message: str) -> None:
+        if trace is not None:
+            trace.append(message)
+
     headers = {
         "User-Agent": user_agent,
         "Accept": "text/html,image/*,*/*;q=0.8",
@@ -172,10 +177,18 @@ def _http_get(url: str, *, timeout: float, max_bytes: int, user_agent: str):
             final_url = response.geturl() or url
             resp_headers = {k.lower(): v for k, v in response.headers.items()}
             body = response.read(max_bytes + 1)
-    except (urllib.error.URLError, urllib.error.HTTPError, ValueError,
-            TimeoutError, OSError):
+    except urllib.error.HTTPError as e:
+        _log(f"[page]   HTTP-ошибка {e.code}: {e.reason}")
+        return None
+    except urllib.error.URLError as e:
+        # Причина в e.reason: timeout (соединение), gaierror (DNS) и т.п.
+        _log(f"[page]   ошибка сети: {e.reason!r}")
+        return None
+    except (ValueError, TimeoutError, OSError) as e:
+        _log(f"[page]   ошибка сети: {e!r}")
         return None
     if len(body) > max_bytes:
+        _log(f"[page]   ответ слишком большой: {len(body)} байт > {max_bytes}")
         return None
     return final_url, resp_headers, body
 
@@ -208,7 +221,7 @@ def fetch_image_from_link(
             continue
         _log(f"[page] пробую: {page_url}")
         page = _http_get(page_url, timeout=timeout, max_bytes=MAX_HTML_BYTES,
-                         user_agent=user_agent)
+                         user_agent=user_agent, trace=trace)
         if not page:
             _log(f"[page]   запрос не удался: {page_url}")
             continue
@@ -232,7 +245,7 @@ def fetch_image_from_link(
         image_url = html_lib.unescape(match.group(1).strip())
         _log(f"[page]   найдена картинка: {image_url}")
         page = _http_get(image_url, timeout=timeout, max_bytes=max_bytes,
-                         user_agent=user_agent)
+                         user_agent=user_agent, trace=trace)
         if not page:
             _log("[page]   картинка по найденному URL не скачалась")
             continue
@@ -251,11 +264,12 @@ async def download_image_from_link(
     timeout: float = DEFAULT_TIMEOUT,
     max_bytes: int = DEFAULT_MAX_BYTES,
     user_agent: str = DEFAULT_USER_AGENT,
+    trace: Optional[list] = None,
 ) -> Optional[LinkedImage]:
     """Асинхронная обёртка: блокирующий urllib уходит в отдельный поток."""
     return await asyncio.to_thread(
         fetch_image_from_link, url,
-        timeout=timeout, max_bytes=max_bytes, user_agent=user_agent,
+        timeout=timeout, max_bytes=max_bytes, user_agent=user_agent, trace=trace,
     )
 
 

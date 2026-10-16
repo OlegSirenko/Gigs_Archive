@@ -1002,7 +1002,8 @@ async def process_instagram_link(message: types.Message, state: FSMContext):
     )
 
     # Download the image (non-blocking: urllib runs in a thread)
-    result = await download_image_from_link(link)
+    trace: list[str] = []
+    result = await download_image_from_link(link, trace=trace)
 
     # Remove the "downloading..." notice
     try:
@@ -1012,6 +1013,10 @@ async def process_instagram_link(message: types.Message, state: FSMContext):
 
     # Could not download an image -> offer to try another service
     if not result:
+        logger.warning(
+            "Image download failed for link %s (user %s):\n%s",
+            link, message.from_user.id, "\n".join(trace)
+        )
         await message.answer(
             t('poster_flow.image_link.failed', language),
             parse_mode="HTML",

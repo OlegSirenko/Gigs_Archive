@@ -89,7 +89,13 @@ class PrivacyPolicyMiddleware(BaseMiddleware):
         # ⚠️ STRICT DM-ONLY POLICY FOR USERS.
         # Non-admin users can ONLY interact with the bot in Direct Messages.
         # All group/channel/forum updates are dropped silently (no crash, no error).
-        chat_type = getattr(real_event.chat, 'type', None)
+        # CallbackQuery has NO .chat attribute — its chat lives on .message
+        # (which may be None for very old / inaccessible messages).
+        if isinstance(real_event, CallbackQuery):
+            chat = real_event.message.chat if real_event.message else None
+        else:
+            chat = getattr(real_event, "chat", None)
+        chat_type = getattr(chat, "type", None)
         if chat_type != 'private':
             return await handler(event, data)
 

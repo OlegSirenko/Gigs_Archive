@@ -25,7 +25,8 @@ from bot.keyboards import (
     image_confirmation_keyboard,
     language_selection_keyboard,
     privacy_policy_keyboard,
-    privacy_acceptance_keyboard
+    privacy_acceptance_keyboard,
+    site_privacy_url,
 )
 from utils.image_link import (
     download_image_from_link,
@@ -434,6 +435,16 @@ async def show_privacy_policy(callback: types.CallbackQuery):
     builder.row(
         types.InlineKeyboardButton(text=i18n.t('common.back', language), callback_data="privacy:back")
     )
+
+    # Полный текст политики — страница на сайте (вместо внешней ссылки на репозиторий).
+    _full_url = site_privacy_url(language)
+    if _full_url:
+        builder.row(
+            types.InlineKeyboardButton(
+                text=i18n.t('common.privacy_policy_full', language),
+                url=_full_url
+            )
+        )
 
     builder.row(
         types.InlineKeyboardButton(text=i18n.t('common.delete_data', language), callback_data="delete:confirm")

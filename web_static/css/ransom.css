@@ -1037,3 +1037,79 @@ main.container:has(.article-detail) { max-width: 900px; }
 }
 .article-body ul.article-list { list-style: square; }
 .article-body li { margin: .3em 0; }
+
+/* ============================================================
+   ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ (/privacy)
+   Тот же ransom-стиль, что и читалка статей (.article-detail).
+   ============================================================ */
+.privacy-page .privacy-title {
+    font-family: var(--font-cut);
+    font-size: clamp(1.6rem, 4.5vw, 2.4rem);
+    line-height: 1.2;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: var(--paper);
+    margin: 0 0 .6rem;
+}
+.article-body .privacy-title + p { text-indent: 0; }
+
+/* Переключатель языка RU / EN */
+.privacy-lang {
+    display: flex;
+    gap: .5rem;
+    justify-content: flex-end;
+    margin-bottom: 1.4rem;
+}
+.privacy-lang a {
+    font-family: var(--font-type);
+    font-weight: 700;
+    font-size: .85rem;
+    letter-spacing: .05em;
+    padding: .34rem .9rem;
+    border: 2px solid var(--border-color);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+.privacy-lang a:hover { color: var(--text-primary); border-color: var(--gold); }
+.privacy-lang a.active {
+    background: var(--gold);
+    color: var(--ink);
+    border-color: var(--gold);
+    box-shadow: 2px 3px 0 rgba(0, 0, 0, .5);
+}
+
+/* Таблицы внутри политики */
+.privacy-table-wrap { overflow-x: auto; margin: 1.6rem 0; }
+.article-body .privacy-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .95rem;
+    background: rgba(245, 239, 220, .03);
+}
+.article-body .privacy-table th,
+.article-body .privacy-table td {
+    border: 1px solid var(--border-color);
+    padding: .55rem .8rem;
+    vertical-align: top;
+    text-indent: 0;
+}
+.article-body .privacy-table thead th {
+    font-family: var(--font-cut);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--ink);
+    background: var(--gold);
+}
+.article-body .privacy-table tbody tr:nth-child(even) {
+    background: rgba(155, 89, 182, .06);
+}
+.article-body .privacy-table tbody tr:hover {
+    background: rgba(244, 208, 63, .08);
+}
+
+@media (max-width: 640px) {
+    .article-body .privacy-table { font-size: .85rem; }
+    .article-body .privacy-table th,
+    .article-body .privacy-table td { padding: .4rem .5rem; }
+}

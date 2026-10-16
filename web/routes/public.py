@@ -18,6 +18,7 @@ from web.helpers import attach_cancel_flags, render_body
 from web.posters import first_line, telegram_post_link
 from web.helpers import poster_image_url
 from web import i18n_web
+from web import privacy
 import httpx
 from fastapi.responses import HTMLResponse, StreamingResponse, Response
 import aiohttp
@@ -99,6 +100,8 @@ def _ctx(request: Request, **extra):
         # Полный абсолютный URL текущей страницы для canonical/og:url
         "canonical_url": (settings.site_url or str(request.base_url).rstrip("/")) + request.url.path,
         "telegram_channel": settings.telegram_channel,
+        # Ссылка на исходный код (бот + сайт) в футере. Пусто -> ссылка скрыта.
+        "source_repo_url": settings.source_repo_url,
         "current_user": user,
         "now": datetime.now(),
         "timedelta": timedelta,
@@ -205,6 +208,32 @@ def home(request: Request):
         total_events=total_events,
         recent_articles=recent_articles,
         total_articles=total_articles,
+    ))
+
+
+# ---------------- Privacy policy (Политика конфиденциальности) ----------------
+# Страница показывает locales/privacy_<lang>.md в оформлении сайта.
+# Тот же файл, что отдаёт Telegram-бот по кнопке «Политика конфиденциальности».
+_PRIVACY_META = {
+    "ru": {"title": "Политика конфиденциальности", "back": "На главную"},
+    "en": {"title": "Privacy Policy", "back": "Back to home"},
+}
+
+
+@router.get("/privacy")
+def privacy_page(
+    request: Request,
+    lang: str = Query("ru"),
+):
+    # Неизвестный язык не ломает страницу — мягко падаем на русский.
+    lang = lang.lower() if lang.lower() in privacy.AVAILABLE_LANGS else "ru"
+    meta = _PRIVACY_META.get(lang, _PRIVACY_META["ru"])
+    return templates.TemplateResponse(request, "privacy.html", _ctx(
+        request,
+        content=privacy.render(lang),
+        lang=lang,
+        page_title=meta["title"],
+        back_label=meta["back"],
     ))
 
 

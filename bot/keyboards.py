@@ -8,6 +8,20 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
 from datetime import datetime, timedelta
 from utils.i18n import i18n, t
+from config import config
+
+
+def site_privacy_url(language: str = "ru") -> str | None:
+    """Absolute URL of the full privacy-policy page on the website.
+
+    Returns None when SITE_URL is not configured, so callers can simply skip
+    the "full policy" button (never build a broken link).
+    """
+    base = (config.site_url or "").strip().rstrip("/")
+    if not base:
+        return None
+    lang = "en" if str(language).lower().startswith("en") else "ru"
+    return f"{base}/privacy?lang={lang}"
 
 # =============================================================================
 # ============ USER KEYBOARDS (Poster Submission Flow) ========================
@@ -135,6 +149,13 @@ def privacy_policy_keyboard(language: str):
     builder.row(
         InlineKeyboardButton(text=f"{i18n.t('common.privacy_policy', language)}", callback_data="privacy:show")
     )
+    url = site_privacy_url(language)
+    if url:
+        builder.row(
+            InlineKeyboardButton(
+                text=f"{i18n.t('common.privacy_policy_full', language)}", url=url
+            )
+        )
     return builder
 
 
@@ -153,6 +174,13 @@ def privacy_acceptance_keyboard(language: str):
     builder.row(
         InlineKeyboardButton(text=f"{i18n.t('common.privacy_decline', language)}", callback_data="delete:confirm")
     )
+    url = site_privacy_url(language)
+    if url:
+        builder.row(
+            InlineKeyboardButton(
+                text=f"{i18n.t('common.privacy_policy_full', language)}", url=url
+            )
+        )
     return builder
 
 # =============================================================================

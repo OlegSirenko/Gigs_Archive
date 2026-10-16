@@ -77,6 +77,7 @@ def build_sitemap(base: str) -> str:
     blocks.append(_url_block(f"{base}/", now, "hourly", "1.0"))
     blocks.append(_url_block(f"{base}/posters", now, "daily", "0.9"))
     blocks.append(_url_block(f"{base}/articles", now, "weekly", "0.8"))
+    blocks.append(_url_block(f"{base}/privacy", now, "monthly", "0.3"))
 
     # ---- Poster detail pages (approved events only) ----
     try:

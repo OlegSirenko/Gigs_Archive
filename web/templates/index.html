@@ -257,8 +257,9 @@
             <span>© 2026 Gigs Archive. Сделано с любовью к музыке.</span>
         </div>
         <div class="footer-links">
-            <a href="https://github.com/OlegSirenko/Gigs_Archive" target="_blank">GitHub</a>
             <a href="https://t.me/{{ telegram_channel }}" target="_blank">Telegram</a>
+            {% if source_repo_url %}<a href="{{ source_repo_url }}" target="_blank" rel="noopener noreferrer">GitHub</a>{% endif %}
+            <a href="/privacy">Политика конфиденциальности</a>
             <a href="/admin">I'm Admin</a>
         </div>
     </div>

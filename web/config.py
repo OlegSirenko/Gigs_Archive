@@ -153,6 +153,12 @@ class WebSettings:
         self.site_url = os.environ.get("SITE_URL", "").rstrip("/")
         # Public Telegram channel username (links are built as https://t.me/<name>)
         self.telegram_channel = os.environ.get("TELEGRAM_CHANNEL", "GigsArchive")
+        # Public repo with the source code of the bot + website (link in the
+        # footer). Set SOURCE_REPO_URL="" to hide the link entirely.
+        self.source_repo_url = os.environ.get(
+            "SOURCE_REPO_URL",
+            "https://github.com/OlegSirenko/Gigs_Archive",
+        ).strip()
         self.bot_token = os.environ.get("BOT_TOKEN", "NONE")
         # --- Logo ---
         # The site logo lives in web_static/img/. If it is missing, the

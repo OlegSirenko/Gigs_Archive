@@ -96,6 +96,7 @@ def create_app() -> FastAPI:
             "site_url": settings.site_url,
             "canonical_url": None,
             "telegram_channel": settings.telegram_channel,
+            "source_repo_url": settings.source_repo_url,
             "current_user": None,
         }, status_code=404)
 

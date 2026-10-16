@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} — {{ site_name }}{% endblock %}
+{% block description %}{{ page_title }} Telegram-бота {{ site_name }} — обработка
+   персональных данных, права субъекта и контактные данные оператора.{% endblock %}
+{% block og_title %}{{ page_title }} — {{ site_name }}{% endblock %}
+
+{% block content %}
+<article class="detail article-detail privacy-page">
+
+  <div class="privacy-lang">
+    <a href="/privacy?lang=ru" class="{{ 'active' if lang == 'ru' else '' }}">RU</a>
+    <a href="/privacy?lang=en" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
+  </div>
+
+  <div class="article-body">
+    {{ content | safe }}
+  </div>
+
+  <p class="detail-actions"><a class="btn" href="/">← {{ back_label }}</a></p>
+</article>
+{% endblock %}

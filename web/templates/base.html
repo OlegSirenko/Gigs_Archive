@@ -66,7 +66,9 @@
 <footer class="site-footer">
   <div class="container">
     <p>{{ site_title }} — архив афиш мероприятий, репосты из
-       <a href="https://t.me/{{ telegram_channel }}">Telegram-канала @{{ telegram_channel }}</a>.</p>
+       <a href="https://t.me/{{ telegram_channel }}">Telegram-канала @{{ telegram_channel }}</a>.
+       <a href="/privacy">Политика конфиденциальности</a>{% if source_repo_url %} ·
+       <a href="{{ source_repo_url }}" target="_blank" rel="noopener noreferrer">Исходный код</a>{% endif %}.</p>
   </div>
 </footer>
 {% endblock %}

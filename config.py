@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # Privacy policy version (update to force re-acceptance)
     privacy_policy_version: str = "1.0"
 
+    # Public website origin (SITE_URL in .env), used to deep-link the bot to the
+    # full privacy policy page on the site (e.g. https://GigsArchive.at.by).
+    site_url: str = ""
+
     # Bot username (set after bot starts)
     bot_username: str | None = None
 

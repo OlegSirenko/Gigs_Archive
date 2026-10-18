@@ -116,7 +116,7 @@ def create_app() -> FastAPI:
             <head>
                 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
             </head>
-            <body>Verification: c0cfda208163f11a</body>
+            <body>Verification: 70bfce2ae505e016</body>
         </html>
         """
 

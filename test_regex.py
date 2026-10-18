@@ -1,0 +1,1 @@
+import re; pattern = r"^(approve|decline):(\d+):([01]):(\d+)$"; test_data = "approve:540929323:0:203"; print("Pattern:", pattern); print("Test data:", test_data); match = re.match(pattern, test_data); print("Match result:", match); print("Groups:", match.groups() if match else "No match")

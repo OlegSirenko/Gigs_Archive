@@ -109,7 +109,7 @@ def create_app() -> FastAPI:
                 % (settings.database_path, 'found' if ok else 'not created yet',
                    articles_db_path, 'found' if ok_articles else 'not created yet'))
 
-    @app.get("/yandex_c0cfda208163f11a.html", response_class=HTMLResponse)
+    @app.get("/yandex_70bfce2ae505e016.html", response_class=HTMLResponse)
     async def yandex_verification():
         return """
         <html>
